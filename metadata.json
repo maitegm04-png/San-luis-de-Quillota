@@ -1,0 +1,8 @@
+{
+  "name": "DT Fútbol - Base de Datos y Planillas de Partido",
+  "description": "Sistema integral de gestión de jugadores, pizarra táctica, convocatorias y planillas de partido para entrenadores de fútbol.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
