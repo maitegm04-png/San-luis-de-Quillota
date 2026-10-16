@@ -1,12 +1,18 @@
 import React, { useState } from 'react';
 import { useFootball } from '../../context/FootballContext';
-import { LineupPlayer, Player, TacticalFormation } from '../../types/football';
+import { useAuth } from '../../context/AuthContext';
+import { getAllowedCategories } from '../../types/auth';
+import { LineupPlayer, Player, TacticalFormation, matchesCategoryFilter } from '../../types/football';
 import { FORMATIONS_SLOTS } from '../../data/mockData';
 import { PitchView } from '../PitchView';
 import { Trophy, Shield, Printer, RotateCcw, Award, CheckCircle2, X } from 'lucide-react';
 
 export const TacticalBoard: React.FC = () => {
   const { players, clubInfo, activeCategory, setActiveCategory, getCategoryStaff } = useFootball();
+  const { currentUser } = useAuth();
+
+  const isCoordinator = currentUser?.role === 'Coordinador General' || currentUser?.category === 'Todas';
+  const allowedCategories = getAllowedCategories(currentUser?.category);
 
   const [formation, setFormation] = useState<TacticalFormation>('4-3-3');
   const [boardTitle, setBoardTitle] = useState('Plan Táctico Principal');
@@ -23,17 +29,21 @@ export const TacticalBoard: React.FC = () => {
     'Córners a favor: 2 al primer palo, 3 en zona de remate, 1 al rechace. Córners en contra: marcaje zonal mixto (5 zonales + 3 individuales).'
   );
 
-  // Filter players by active category
-  const categoryPlayers = activeCategory === 'all'
-    ? players
-    : players.filter((p) => p.category === activeCategory);
+  // Filter players scoped by role and active category
+  const categoryPlayers = players.filter((p) => {
+    if (!isCoordinator && !allowedCategories.includes(p.category as any)) return false;
+    return matchesCategoryFilter(p.category, activeCategory);
+  });
 
   const activeStaff = getCategoryStaff(activeCategory);
 
   // Lineup state for tactical sandbox
   const [lineup, setLineup] = useState<LineupPlayer[]>(() => {
     const defaultSlots = FORMATIONS_SLOTS['4-3-3'];
-    const initialPool = (activeCategory === 'all' ? players : players.filter((p) => p.category === activeCategory));
+    const initialPool = players.filter((p) => {
+      if (!isCoordinator && !allowedCategories.includes(p.category as any)) return false;
+      return matchesCategoryFilter(p.category, activeCategory);
+    });
     const available = initialPool.filter((p) => p.status === 'Disponible');
     return defaultSlots.map((s, i) => ({
       slotId: s.id,
@@ -47,7 +57,10 @@ export const TacticalBoard: React.FC = () => {
 
   // When active category changes, update the lineup with players from this category
   React.useEffect(() => {
-    const pool = activeCategory === 'all' ? players : players.filter((p) => p.category === activeCategory);
+    const pool = players.filter((p) => {
+      if (!isCoordinator && !allowedCategories.includes(p.category as any)) return false;
+      return matchesCategoryFilter(p.category, activeCategory);
+    });
     const available = pool.filter((p) => p.status === 'Disponible');
     const defaultSlots = FORMATIONS_SLOTS[formation];
 

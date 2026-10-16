@@ -73,22 +73,37 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose, onEdi
 
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div className="flex items-center gap-4">
-              {/* Squad number circle */}
-              <div
-                className={`w-16 h-16 rounded-2xl flex items-center justify-center font-black text-2xl shadow-xl border-2 ${
-                  player.primaryPosition === 'POR'
-                    ? 'bg-amber-500 text-slate-950 border-amber-300'
-                    : 'text-white border-white/20'
-                }`}
-                style={
-                  player.avatarColor && player.primaryPosition !== 'POR'
-                    ? { backgroundColor: player.avatarColor }
-                    : player.primaryPosition !== 'POR'
-                    ? { backgroundColor: '#10b981' }
-                    : undefined
-                }
-              >
-                #{player.squadNumber}
+              {/* Player Photo or Squad number circle */}
+              <div className="relative shrink-0">
+                {player.photoUrl ? (
+                  <div className="relative">
+                    <img
+                      src={player.photoUrl}
+                      alt={`${player.firstName} ${player.lastName}`}
+                      className="w-16 h-16 rounded-2xl object-cover border-2 border-amber-400 shadow-xl"
+                    />
+                    <span className="absolute -bottom-1.5 -right-1.5 bg-slate-950 text-amber-400 font-black text-xs px-1.5 py-0.5 rounded-md border border-amber-400/50 shadow">
+                      #{player.squadNumber}
+                    </span>
+                  </div>
+                ) : (
+                  <div
+                    className={`w-16 h-16 rounded-2xl flex items-center justify-center font-black text-2xl shadow-xl border-2 ${
+                      player.primaryPosition === 'POR'
+                        ? 'bg-amber-500 text-slate-950 border-amber-300'
+                        : 'text-white border-white/20'
+                    }`}
+                    style={
+                      player.avatarColor && player.primaryPosition !== 'POR'
+                        ? { backgroundColor: player.avatarColor }
+                        : player.primaryPosition !== 'POR'
+                        ? { backgroundColor: '#10b981' }
+                        : undefined
+                    }
+                  >
+                    #{player.squadNumber}
+                  </div>
+                )}
               </div>
 
               <div>

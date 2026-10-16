@@ -9,13 +9,18 @@ import {
   Settings, 
   Shield, 
   Download,
+  Upload,
   Calendar,
   LogOut,
-  UserCheck
+  UserCheck,
+  Cloud
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { getAllowedCategories } from '../types/auth';
+import { SanLuisLogo } from './Common/SanLuisLogo';
+import { FirebaseQuotaBadge } from './Common/FirebaseQuotaBadge';
 
-export type ActiveTab = 'matches' | 'players' | 'tactics' | 'stats';
+export type ActiveTab = 'matches' | 'players' | 'tactics' | 'stats' | 'planning';
 
 interface HeaderProps {
   activeTab: ActiveTab;
@@ -34,8 +39,74 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenSettings,
   onOpenUsers,
 }) => {
-  const { clubInfo, exportDatabaseJson, matches, activeCategory, setActiveCategory, getCategoryStaff } = useFootball();
+  const { clubInfo, exportDatabaseJson, importDatabaseJson, matches, activeCategory, setActiveCategory, getCategoryStaff } = useFootball();
   const { currentUser, logout } = useAuth();
+
+  const isCoordinator = currentUser?.role === 'Coordinador General' || currentUser?.category === 'Todas';
+  const allowedCategories = getAllowedCategories(currentUser?.category);
+
+  // If regular DT and active category is not in their allowed scope, reset to their assigned group
+  React.useEffect(() => {
+    if (!isCoordinator && currentUser?.category) {
+      const isAllowed = allowedCategories.includes(activeCategory as any) || activeCategory === currentUser.category;
+      if (!isAllowed) {
+        setActiveCategory(currentUser.category);
+      }
+    }
+  }, [currentUser?.category, activeCategory, isCoordinator, allowedCategories, setActiveCategory]);
+
+  const categoryOptions = React.useMemo(() => {
+    if (isCoordinator) {
+      return [
+        { id: 'all', label: 'Ver Todas' },
+        { id: 'Sub 11-12', label: 'Sub 11-12' },
+        { id: 'Sub 11', label: 'Sub 11' },
+        { id: 'Sub 12', label: 'Sub 12' },
+        { id: 'Sub 13-14', label: 'Sub 13-14' },
+        { id: 'Sub 13', label: 'Sub 13' },
+        { id: 'Sub 14', label: 'Sub 14' },
+        { id: 'Sub 15-16', label: 'Sub 15-16' },
+        { id: 'Sub 15', label: 'Sub 15' },
+        { id: 'Sub 16', label: 'Sub 16' },
+        { id: 'Sub 18', label: 'Sub 18' },
+        { id: 'Sub 20', label: 'Sub 20' },
+      ];
+    }
+
+    if (currentUser?.category === 'Sub 11-12') {
+      return [
+        { id: 'Sub 11-12', label: 'Ambas (Sub 11-12)' },
+        { id: 'Sub 11', label: 'Sub 11' },
+        { id: 'Sub 12', label: 'Sub 12' },
+      ];
+    }
+    if (currentUser?.category === 'Sub 13-14') {
+      return [
+        { id: 'Sub 13-14', label: 'Ambas (Sub 13-14)' },
+        { id: 'Sub 13', label: 'Sub 13' },
+        { id: 'Sub 14', label: 'Sub 14' },
+      ];
+    }
+    if (currentUser?.category === 'Sub 15-16') {
+      return [
+        { id: 'Sub 15-16', label: 'Ambas (Sub 15-16)' },
+        { id: 'Sub 15', label: 'Sub 15' },
+        { id: 'Sub 16', label: 'Sub 16' },
+      ];
+    }
+    if (currentUser?.category === 'Sub 18') {
+      return [
+        { id: 'Sub 18', label: 'Categoría Sub 18' },
+      ];
+    }
+    if (currentUser?.category === 'Sub 20') {
+      return [
+        { id: 'Sub 20', label: 'Categoría Sub 20' },
+      ];
+    }
+
+    return allowedCategories.map((c) => ({ id: c, label: c }));
+  }, [isCoordinator, currentUser?.category, allowedCategories]);
 
   const nextMatch = matches.find((m) => m.status === 'scheduled');
   const liveMatch = matches.find((m) => m.status === 'live');
@@ -48,8 +119,8 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           {/* Club Identity */}
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-xl bg-amber-400 text-slate-950 font-black text-sm flex items-center justify-center shadow-lg ring-2 ring-amber-300/40 border border-slate-950">
-              SLQ
+            <div className="w-12 h-12 rounded-xl bg-slate-950 p-1 flex items-center justify-center shadow-lg ring-2 ring-amber-400/50 border border-slate-800">
+              <SanLuisLogo className="w-full h-full" />
             </div>
             <div>
               <div className="flex items-center gap-2">
@@ -58,6 +129,10 @@ export const Header: React.FC<HeaderProps> = ({
                 </h1>
                 <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/40">
                   {activeCategory !== 'all' ? activeCategory : clubInfo.category}
+                </span>
+                <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                  <Cloud className="w-3 h-3 text-emerald-400" />
+                  Nube Firebase
                 </span>
                 {liveMatch && (
                   <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/30 animate-pulse">
@@ -82,14 +157,49 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Quick Header Actions */}
           <div className="flex items-center gap-2 self-end sm:self-auto flex-wrap">
+            <FirebaseQuotaBadge compact />
+
+            {/* Respaldar JSON */}
             <button
               onClick={exportDatabaseJson}
-              title="Descargar copia de seguridad en JSON"
+              title="Descargar copia de seguridad en JSON para transferir a otra URL o usuario"
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors cursor-pointer"
             >
               <Download className="w-3.5 h-3.5" />
               <span className="hidden md:inline">Respaldar</span>
             </button>
+
+            {/* Importar JSON */}
+            <label
+              title="Cargar archivo JSON de respaldo para actualizar jugadores y planillas en esta URL"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-amber-300 hover:text-white bg-amber-400/10 hover:bg-amber-400/20 rounded-lg border border-amber-400/40 transition-colors cursor-pointer"
+            >
+              <Upload className="w-3.5 h-3.5" />
+              <span className="hidden md:inline">Importar</span>
+              <input
+                type="file"
+                accept=".json"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const reader = new FileReader();
+                  reader.onload = (event) => {
+                    const content = event.target?.result as string;
+                    if (content) {
+                      const success = importDatabaseJson(content);
+                      if (success) {
+                        alert('¡Datos transferidos con éxito! Los futbolistas, planillas y configuraciones se actualizaron en esta URL.');
+                      } else {
+                        alert('El archivo no tiene el formato JSON válido.');
+                      }
+                    }
+                  };
+                  reader.readAsText(file);
+                  e.target.value = '';
+                }}
+              />
+            </label>
 
             <button
               onClick={onOpenSettings}
@@ -161,20 +271,20 @@ export const Header: React.FC<HeaderProps> = ({
                 Categoría:
               </span>
             </div>
-            {['Sub 11', 'Sub 12', 'Sub 13', 'Sub 14', 'Sub 15', 'Sub 16', 'Sub 18', 'Sub 20', 'all'].map((cat) => {
-              const isCurrent = activeCategory === cat;
+            {categoryOptions.map((opt) => {
+              const isCurrent = activeCategory === opt.id;
               return (
                 <button
-                  key={cat}
+                  key={opt.id}
                   type="button"
-                  onClick={() => setActiveCategory(cat)}
+                  onClick={() => setActiveCategory(opt.id)}
                   className={`px-2.5 py-1 text-xs rounded-lg font-bold transition-all cursor-pointer ${
                     isCurrent
                       ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-950/50 ring-1 ring-amber-300 scale-105'
                       : 'bg-slate-950 text-slate-400 hover:text-slate-200 hover:bg-slate-800 border border-slate-800/90'
                   }`}
                 >
-                  {cat === 'all' ? 'Ver Todas' : cat}
+                  {opt.label}
                 </button>
               );
             })}
@@ -235,6 +345,21 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <Trophy className="w-4 h-4" />
             <span>Pizarra Táctica</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('planning')}
+            className={`flex items-center gap-2 px-3.5 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all whitespace-nowrap ${
+              activeTab === 'planning'
+                ? 'bg-amber-400 text-slate-950 font-black shadow-md shadow-amber-950/40'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+            }`}
+          >
+            <Calendar className="w-4 h-4" />
+            <span>Planificación por Categorías</span>
+            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-300 border border-amber-400/30">
+              Áreas
+            </span>
           </button>
 
           <button

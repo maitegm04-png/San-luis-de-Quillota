@@ -1,0 +1,156 @@
+{
+  "entities": {
+    "Player": {
+      "title": "Player",
+      "description": "Ficha de futbolista del club San Luis de Quillota",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "squadNumber": { "type": "number" },
+        "firstName": { "type": "string" },
+        "lastName": { "type": "string" },
+        "nickname": { "type": "string" },
+        "primaryPosition": { "type": "string" },
+        "secondaryPosition": { "type": "string" },
+        "category": { "type": "string" },
+        "birthDate": { "type": "string" },
+        "dominantFoot": { "type": "string" },
+        "heightCm": { "type": "number" },
+        "weightKg": { "type": "number" },
+        "status": { "type": "string" },
+        "statusReason": { "type": "string" },
+        "idCard": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "notes": { "type": "string" },
+        "avatarColor": { "type": "string" },
+        "photoUrl": { "type": "string" },
+        "attributes": { "type": "object" },
+        "stats": { "type": "object" }
+      },
+      "required": ["id", "firstName", "lastName", "primaryPosition", "category"]
+    },
+    "MatchSheet": {
+      "title": "MatchSheet",
+      "description": "Planilla de partido oficial y pizarra táctica",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "competition": { "type": "string" },
+        "category": { "type": "string" },
+        "matchDay": { "type": "string" },
+        "date": { "type": "string" },
+        "time": { "type": "string" },
+        "opponent": { "type": "string" },
+        "isHome": { "type": "boolean" },
+        "status": { "type": "string" },
+        "formation": { "type": "string" },
+        "startingEleven": { "type": "array" },
+        "substitutes": { "type": "array" },
+        "coachStaff": { "type": "object" },
+        "captainId": { "type": "string" },
+        "homeScore": { "type": "number" },
+        "awayScore": { "type": "number" },
+        "events": { "type": "array" },
+        "ratings": { "type": "object" },
+        "collectiveStats": { "type": "object" },
+        "notes": { "type": "string" }
+      },
+      "required": ["id", "title", "category", "opponent", "date"]
+    },
+    "ClubInfo": {
+      "title": "ClubInfo",
+      "description": "Información institucional del club",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "shortName": { "type": "string" },
+        "category": { "type": "string" },
+        "selectedCategory": { "type": "string" },
+        "stadium": { "type": "string" },
+        "season": { "type": "string" },
+        "federationId": { "type": "string" }
+      },
+      "required": ["name", "category", "season"]
+    },
+    "CoachStaff": {
+      "title": "CoachStaff",
+      "description": "Cuerpo técnico por serie o categoría",
+      "type": "object",
+      "properties": {
+        "coach": { "type": "string" },
+        "assistantCoach": { "type": "string" },
+        "physicalTrainer": { "type": "string" },
+        "goalkeeperCoach": { "type": "string" },
+        "kinesiologist": { "type": "string" },
+        "kitManager": { "type": "string" },
+        "coordinator": { "type": "string" }
+      },
+      "required": ["coach"]
+    },
+    "UserAccount": {
+      "title": "UserAccount",
+      "description": "Usuario técnico o administrativo con acceso al club",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "password": { "type": "string" },
+        "role": { "type": "string" },
+        "category": { "type": "string" },
+        "avatarColor": { "type": "string" },
+        "phone": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "lastLogin": { "type": "string" }
+      },
+      "required": ["id", "name", "email", "role", "category"]
+    },
+    "WeeklyPlan": {
+      "title": "WeeklyPlan",
+      "description": "Planificación semanal de entrenamientos por categoría y áreas de trabajo",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "category": { "type": "string" },
+        "year": { "type": "number" },
+        "weekNumber": { "type": "number" },
+        "startDate": { "type": "string" },
+        "endDate": { "type": "string" },
+        "updatedAt": { "type": "string" },
+        "authorName": { "type": "string" },
+        "tecnica": { "type": "object" },
+        "fisica": { "type": "object" },
+        "arqueros": { "type": "object" }
+      },
+      "required": ["id", "category", "year", "weekNumber"]
+    }
+  },
+  "firestore": {
+    "/players/{playerId}": {
+      "schema": "Player",
+      "description": "Colección de futbolistas del club"
+    },
+    "/matches/{matchId}": {
+      "schema": "MatchSheet",
+      "description": "Colección de planillas de partido"
+    },
+    "/club/info": {
+      "schema": "ClubInfo",
+      "description": "Documento único de configuración del club"
+    },
+    "/staff/{categoryId}": {
+      "schema": "CoachStaff",
+      "description": "Cuerpo técnico asignado a cada serie"
+    },
+    "/users/{userId}": {
+      "schema": "UserAccount",
+      "description": "Cuentas de usuario de técnicos y coordinadores"
+    },
+    "/weekly_plans/{planId}": {
+      "schema": "WeeklyPlan",
+      "description": "Planificaciones semanales por categoría y semana del año"
+    }
+  }
+}

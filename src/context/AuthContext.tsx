@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { UserAccount, UserRole } from '../types/auth';
+import { UserAccount } from '../types/auth';
 import { DEFAULT_USERS } from '../data/defaultUsers';
+import { collection, doc, setDoc, deleteDoc, onSnapshot, writeBatch } from 'firebase/firestore';
+import { db } from '../firebase';
 
 interface AuthContextType {
   currentUser: UserAccount | null;
@@ -16,8 +18,8 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const STORAGE_KEY_USERS = 'san_luis_users_v2';
-const STORAGE_KEY_CURRENT_USER = 'san_luis_current_user_v2';
+const STORAGE_KEY_USERS = 'san_luis_users_v3';
+const STORAGE_KEY_CURRENT_USER = 'san_luis_current_user_v3';
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [users, setUsers] = useState<UserAccount[]>(() => {
@@ -25,13 +27,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const saved = localStorage.getItem(STORAGE_KEY_USERS);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
+        if (Array.isArray(parsed)) {
+          return parsed.filter((u: UserAccount) => !u.id.startsWith('usr-sub') && u.id !== 'usr-coord');
         }
       }
-      return DEFAULT_USERS;
+      return [];
     } catch {
-      return DEFAULT_USERS;
+      return [];
     }
   });
 
@@ -39,13 +41,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const saved = localStorage.getItem(STORAGE_KEY_CURRENT_USER);
       if (saved) {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (parsed && (parsed.id?.startsWith('usr-sub') || parsed.id === 'usr-coord')) {
+          return null;
+        }
+        return parsed;
       }
       return null;
     } catch {
       return null;
     }
   });
+
+  // Listen to Firestore users in real-time
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'users'), (snapshot) => {
+      if (!snapshot.empty) {
+        const cloudUsers: UserAccount[] = [];
+        snapshot.forEach((d) => {
+          const u = d.data() as UserAccount;
+          // Delete any legacy dummy presets so club starts from 0
+          if (u.id.startsWith('usr-sub') || u.id === 'usr-coord') {
+            deleteDoc(doc(db, 'users', u.id)).catch(console.error);
+          } else {
+            cloudUsers.push(u);
+          }
+        });
+        setUsers(cloudUsers);
+      }
+    }, (error) => {
+      console.warn('Firestore users fallback to localStorage', error);
+    });
+
+    return () => unsub();
+  }, []);
 
   // Sync users to storage
   useEffect(() => {
@@ -100,6 +129,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     setCurrentUser(updatedUser);
     setUsers((prev) => prev.map((u) => (u.id === found.id ? updatedUser : u)));
+    setDoc(doc(db, 'users', found.id), updatedUser, { merge: true }).catch(console.error);
     return { success: true };
   };
 
@@ -112,6 +142,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
       setCurrentUser(updatedUser);
       setUsers((prev) => prev.map((u) => (u.id === found.id ? updatedUser : u)));
+      setDoc(doc(db, 'users', found.id), updatedUser, { merge: true }).catch(console.error);
     }
   };
 
@@ -146,6 +177,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const nextUsers = [...users, created];
     setUsers(nextUsers);
     setCurrentUser(created);
+    setDoc(doc(db, 'users', created.id), created).catch(console.error);
     return { success: true };
   };
 
@@ -158,6 +190,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { success: false, error: 'No se puede eliminar el único usuario del club' };
     }
     setUsers((prev) => prev.filter((u) => u.id !== userId));
+    deleteDoc(doc(db, 'users', userId)).catch(console.error);
     if (currentUser?.id === userId) {
       setCurrentUser(null);
     }
@@ -171,6 +204,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (currentUser?.id === userId) {
       setCurrentUser((prev) => (prev ? { ...prev, ...data } : null));
     }
+    setDoc(doc(db, 'users', userId), data, { merge: true }).catch(console.error);
   };
 
   return (

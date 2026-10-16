@@ -1,6 +1,8 @@
 import React, { useState, useMemo } from 'react';
-import { Player, PositionGroup, PlayerStatus } from '../../types/football';
+import { Player, PositionGroup, PlayerStatus, matchesCategoryFilter } from '../../types/football';
 import { useFootball } from '../../context/FootballContext';
+import { useAuth } from '../../context/AuthContext';
+import { getAllowedCategories } from '../../types/auth';
 import { PlayerCard } from './PlayerCard';
 import { PlayerModal } from './PlayerModal';
 import { PlayerFormModal } from './PlayerFormModal';
@@ -26,6 +28,10 @@ interface PlayerListProps {
 
 export const PlayerList: React.FC<PlayerListProps> = ({ onOpenNewPlayer }) => {
   const { players, activeCategory, setActiveCategory } = useFootball();
+  const { currentUser } = useAuth();
+
+  const isCoordinator = currentUser?.role === 'Coordinador General' || currentUser?.category === 'Todas';
+  const allowedCategories = getAllowedCategories(currentUser?.category);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedGroup, setSelectedGroup] = useState<string>('all');
@@ -39,16 +45,24 @@ export const PlayerList: React.FC<PlayerListProps> = ({ onOpenNewPlayer }) => {
   const [selectedPlayerForView, setSelectedPlayerForView] = useState<Player | null>(null);
   const [selectedPlayerForEdit, setSelectedPlayerForEdit] = useState<Player | null>(null);
 
-  // Available categories
+  // Available categories scoped to user role
   const categories = useMemo(() => {
-    const cats = new Set(players.map((p) => p.category));
-    return Array.from(cats);
-  }, [players]);
+    if (isCoordinator) {
+      const cats = new Set(players.map((p) => p.category));
+      return Array.from(cats);
+    }
+    return allowedCategories;
+  }, [players, isCoordinator, allowedCategories]);
 
   // Filtered & Sorted players
   const filteredPlayers = useMemo(() => {
     return players
       .filter((player) => {
+        // Enforce role permission
+        if (!isCoordinator && !allowedCategories.includes(player.category as any)) {
+          return false;
+        }
+
         // Search query
         const query = searchQuery.toLowerCase().trim();
         const fullName = `${player.firstName} ${player.lastName}`.toLowerCase();
@@ -69,8 +83,8 @@ export const PlayerList: React.FC<PlayerListProps> = ({ onOpenNewPlayer }) => {
         // Status
         const matchesStatus = selectedStatus === 'all' || player.status === selectedStatus;
 
-        // Category
-        const matchesCategory = selectedCategory === 'all' || player.category === selectedCategory;
+        // Category with grouping support
+        const matchesCategory = matchesCategoryFilter(player.category, selectedCategory);
 
         return matchesSearch && matchesGroup && matchesStatus && matchesCategory;
       })
@@ -82,13 +96,17 @@ export const PlayerList: React.FC<PlayerListProps> = ({ onOpenNewPlayer }) => {
         if (sortBy === 'rating') return (b.stats.avgRating || 0) - (a.stats.avgRating || 0);
         return 0;
       });
-  }, [players, searchQuery, selectedGroup, selectedStatus, selectedCategory, sortBy]);
+  }, [players, isCoordinator, allowedCategories, searchQuery, selectedGroup, selectedStatus, selectedCategory, sortBy]);
 
-  // Squad counters
-  const totalCount = players.length;
-  const availableCount = players.filter((p) => p.status === 'Disponible').length;
-  const injuredCount = players.filter((p) => p.status === 'Lesionado').length;
-  const suspendedCount = players.filter((p) => p.status === 'Sancionado').length;
+  // Squad counters scoped to authorized players
+  const scopedPlayers = useMemo(() => {
+    return players.filter((p) => isCoordinator || allowedCategories.includes(p.category as any));
+  }, [players, isCoordinator, allowedCategories]);
+
+  const totalCount = scopedPlayers.length;
+  const availableCount = scopedPlayers.filter((p) => p.status === 'Disponible').length;
+  const injuredCount = scopedPlayers.filter((p) => p.status === 'Lesionado').length;
+  const suspendedCount = scopedPlayers.filter((p) => p.status === 'Sancionado').length;
   const doubtfulCount = players.filter((p) => p.status === 'Duda').length;
 
   return (
@@ -338,8 +356,26 @@ export const PlayerList: React.FC<PlayerListProps> = ({ onOpenNewPlayer }) => {
                         #{p.squadNumber}
                       </td>
                       <td className="py-3 px-4 font-bold text-white">
-                        {p.nickname || `${p.firstName} ${p.lastName}`}
-                        {p.nickname && <span className="block font-normal text-slate-400 text-[11px]">{p.firstName} {p.lastName}</span>}
+                        <div className="flex items-center gap-2.5">
+                          {p.photoUrl ? (
+                            <img
+                              src={p.photoUrl}
+                              alt=""
+                              className="w-8 h-8 rounded-lg object-cover border border-amber-400/40 shrink-0"
+                            />
+                          ) : (
+                            <div
+                              className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs text-white shrink-0"
+                              style={{ backgroundColor: p.avatarColor || '#10b981' }}
+                            >
+                              {p.firstName[0]}{p.lastName[0]}
+                            </div>
+                          )}
+                          <div>
+                            <span>{p.nickname || `${p.firstName} ${p.lastName}`}</span>
+                            {p.nickname && <span className="block font-normal text-slate-400 text-[11px]">{p.firstName} {p.lastName}</span>}
+                          </div>
+                        </div>
                       </td>
                       <td className="py-3 px-4">
                         <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${posConfig.color}`}>

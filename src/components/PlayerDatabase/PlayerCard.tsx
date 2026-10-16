@@ -54,22 +54,37 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({ player, onClick, onEdit 
       <div>
         <div className="flex items-start justify-between gap-2 mb-3">
           <div className="flex items-center gap-2.5">
-            {/* Squad Jersey Circle */}
-            <div
-              className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-base shadow-md border ${
-                player.primaryPosition === 'POR'
-                  ? 'bg-amber-500 text-slate-950 border-amber-300'
-                  : 'text-white border-white/20'
-              }`}
-              style={
-                player.avatarColor && player.primaryPosition !== 'POR'
-                  ? { backgroundColor: player.avatarColor }
-                  : player.primaryPosition !== 'POR'
-                  ? { backgroundColor: '#10b981' }
-                  : undefined
-              }
-            >
-              #{player.squadNumber}
+            {/* Player Photo or Squad Jersey Circle */}
+            <div className="relative shrink-0">
+              {player.photoUrl ? (
+                <div className="relative">
+                  <img
+                    src={player.photoUrl}
+                    alt={`${player.firstName} ${player.lastName}`}
+                    className="w-11 h-11 rounded-xl object-cover border border-amber-400/50 shadow-md"
+                  />
+                  <span className="absolute -bottom-1 -right-1 bg-slate-950 text-amber-400 font-black text-[9px] px-1 py-0.2 rounded border border-amber-400/40 shadow">
+                    #{player.squadNumber}
+                  </span>
+                </div>
+              ) : (
+                <div
+                  className={`w-11 h-11 rounded-xl flex items-center justify-center font-black text-base shadow-md border ${
+                    player.primaryPosition === 'POR'
+                      ? 'bg-amber-500 text-slate-950 border-amber-300'
+                      : 'text-white border-white/20'
+                  }`}
+                  style={
+                    player.avatarColor && player.primaryPosition !== 'POR'
+                      ? { backgroundColor: player.avatarColor }
+                      : player.primaryPosition !== 'POR'
+                      ? { backgroundColor: '#10b981' }
+                      : undefined
+                  }
+                >
+                  #{player.squadNumber}
+                </div>
+              )}
             </div>
 
             <div>

@@ -58,6 +58,7 @@ export interface Player {
   email?: string;
   notes?: string;
   avatarColor: string;
+  photoUrl?: string; // Foto del jugador (URL o imagen base64 comprimida)
   attributes: PlayerAttributes;
   stats: PlayerStats;
 }
@@ -211,4 +212,12 @@ export interface ClubInfo {
   stadium: string;
   season: string;
   federationId?: string;
+}
+
+export function matchesCategoryFilter(itemCategory: string, filterCategory: string): boolean {
+  if (!filterCategory || filterCategory === 'all' || filterCategory === 'Todas') return true;
+  if (filterCategory === 'Sub 11-12') return itemCategory === 'Sub 11' || itemCategory === 'Sub 12';
+  if (filterCategory === 'Sub 13-14') return itemCategory === 'Sub 13' || itemCategory === 'Sub 14';
+  if (filterCategory === 'Sub 15-16') return itemCategory === 'Sub 15' || itemCategory === 'Sub 16';
+  return itemCategory === filterCategory;
 }

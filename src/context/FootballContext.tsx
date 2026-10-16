@@ -1,6 +1,9 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { ClubInfo, CoachStaff, MatchEvent, MatchSheet, Player, Position, TacticalFormation } from '../types/football';
 import { FORMATIONS_SLOTS, INITIAL_CLUB_INFO, INITIAL_MATCHES, INITIAL_PLAYERS, INITIAL_STAFF_BY_CATEGORY } from '../data/mockData';
+import { collection, doc, setDoc, deleteDoc, onSnapshot, writeBatch } from 'firebase/firestore';
+import { db } from '../firebase';
+import { canPerformFirebaseWrite, recordQuotaOperation } from '../services/firebaseQuotaGuard';
 
 interface FootballContextType {
   players: Player[];
@@ -109,7 +112,89 @@ export const FootballProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(matches[0]?.id || null);
 
-  // Sync to local storage
+  // Real-time Firestore sync for players
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'players'), (snapshot) => {
+      if (!snapshot.empty) {
+        const cloudPlayers: Player[] = [];
+        snapshot.forEach((d) => {
+          cloudPlayers.push(d.data() as Player);
+        });
+        setPlayers(cloudPlayers);
+      } else {
+        // Seed initial players on first run
+        const batch = writeBatch(db);
+        INITIAL_PLAYERS.forEach((p) => {
+          batch.set(doc(db, 'players', p.id), p);
+        });
+        batch.commit().catch(console.error);
+      }
+    }, (error) => {
+      console.warn('Firestore players sync fallback to cache', error);
+    });
+    return () => unsub();
+  }, []);
+
+  // Real-time Firestore sync for matches
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'matches'), (snapshot) => {
+      if (!snapshot.empty) {
+        const cloudMatches: MatchSheet[] = [];
+        snapshot.forEach((d) => {
+          cloudMatches.push(d.data() as MatchSheet);
+        });
+        setMatches(cloudMatches);
+      } else {
+        // Seed initial matches on first run
+        const batch = writeBatch(db);
+        INITIAL_MATCHES.forEach((m) => {
+          batch.set(doc(db, 'matches', m.id), m);
+        });
+        batch.commit().catch(console.error);
+      }
+    }, (error) => {
+      console.warn('Firestore matches sync fallback to cache', error);
+    });
+    return () => unsub();
+  }, []);
+
+  // Real-time Firestore sync for clubInfo
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, 'club', 'info'), (snapshot) => {
+      if (snapshot.exists()) {
+        setClubInfo(snapshot.data() as ClubInfo);
+      } else {
+        setDoc(doc(db, 'club', 'info'), INITIAL_CLUB_INFO).catch(console.error);
+      }
+    }, (error) => {
+      console.warn('Firestore club sync fallback', error);
+    });
+    return () => unsub();
+  }, []);
+
+  // Real-time Firestore sync for staff per category
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'staff'), (snapshot) => {
+      if (!snapshot.empty) {
+        const cloudStaff: Record<string, CoachStaff> = {};
+        snapshot.forEach((d) => {
+          cloudStaff[d.id] = d.data() as CoachStaff;
+        });
+        setCategoryStaff((prev) => ({ ...prev, ...cloudStaff }));
+      } else {
+        const batch = writeBatch(db);
+        Object.entries(INITIAL_STAFF_BY_CATEGORY).forEach(([cat, staff]) => {
+          batch.set(doc(db, 'staff', cat), staff);
+        });
+        batch.commit().catch(console.error);
+      }
+    }, (error) => {
+      console.warn('Firestore staff sync fallback', error);
+    });
+    return () => unsub();
+  }, []);
+
+  // Sync to local storage as instant backup
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_PLAYERS, JSON.stringify(players));
   }, [players]);
@@ -150,6 +235,7 @@ export const FootballProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setCategoryStaff((prev) => {
       const current = prev[cat] || INITIAL_STAFF_BY_CATEGORY[cat] || clubInfo.coachStaff;
       const updated = { ...current, ...newStaff };
+      setDoc(doc(db, 'staff', cat), updated, { merge: true }).catch(console.error);
       return { ...prev, [cat]: updated };
     });
   };
@@ -178,26 +264,55 @@ export const FootballProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       },
     };
     setPlayers((prev) => [...prev, newPlayer]);
+    if (canPerformFirebaseWrite()) {
+      setDoc(doc(db, 'players', newPlayer.id), newPlayer)
+        .then(() => recordQuotaOperation('write', 1))
+        .catch(console.error);
+    }
   };
 
   const updatePlayer = (id: string, updatedFields: Partial<Player>) => {
     setPlayers((prev) =>
       prev.map((p) => (p.id === id ? { ...p, ...updatedFields } : p))
     );
+    if (canPerformFirebaseWrite()) {
+      setDoc(doc(db, 'players', id), updatedFields, { merge: true })
+        .then(() => recordQuotaOperation('write', 1))
+        .catch(console.error);
+    }
   };
 
   const deletePlayer = (id: string) => {
     setPlayers((prev) => prev.filter((p) => p.id !== id));
+    if (canPerformFirebaseWrite()) {
+      deleteDoc(doc(db, 'players', id))
+        .then(() => recordQuotaOperation('delete', 1))
+        .catch(console.error);
+    }
     // Also remove from any matches lineups
     setMatches((prev) =>
-      prev.map((m) => ({
-        ...m,
-        startingEleven: m.startingEleven.filter((s) => s.playerId !== id),
-        substitutes: m.substitutes.filter((subId) => subId !== id),
-        reserves: m.reserves.filter((resId) => resId !== id),
-        captainId: m.captainId === id ? undefined : m.captainId,
-        viceCaptainId: m.viceCaptainId === id ? undefined : m.viceCaptainId,
-      }))
+      prev.map((m) => {
+        const hasStarting = m.startingEleven.some((s) => s.playerId === id);
+        const hasSub = m.substitutes.includes(id);
+        const hasRes = m.reserves.includes(id);
+        if (hasStarting || hasSub || hasRes || m.captainId === id || m.viceCaptainId === id) {
+          const updated = {
+            ...m,
+            startingEleven: m.startingEleven.filter((s) => s.playerId !== id),
+            substitutes: m.substitutes.filter((subId) => subId !== id),
+            reserves: m.reserves.filter((resId) => resId !== id),
+            captainId: m.captainId === id ? undefined : m.captainId,
+            viceCaptainId: m.viceCaptainId === id ? undefined : m.viceCaptainId,
+          };
+          if (canPerformFirebaseWrite()) {
+            setDoc(doc(db, 'matches', m.id), updated, { merge: true })
+              .then(() => recordQuotaOperation('write', 1))
+              .catch(console.error);
+          }
+          return updated;
+        }
+        return m;
+      })
     );
   };
 
@@ -209,17 +324,34 @@ export const FootballProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     };
     setMatches((prev) => [newMatch, ...prev]);
     setSelectedMatchId(newId);
+    if (canPerformFirebaseWrite()) {
+      setDoc(doc(db, 'matches', newId), newMatch)
+        .then(() => recordQuotaOperation('write', 1))
+        .catch(console.error);
+    }
     return newId;
   };
 
   const updateMatch = (id: string, matchFields: Partial<MatchSheet>) => {
     setMatches((prev) =>
-      prev.map((m) => (m.id === id ? { ...m, ...matchFields } : m))
+      prev.map((m) => {
+        if (m.id === id) {
+          const updated = { ...m, ...matchFields };
+          if (canPerformFirebaseWrite()) {
+            setDoc(doc(db, 'matches', id), updated, { merge: true })
+              .then(() => recordQuotaOperation('write', 1))
+              .catch(console.error);
+          }
+          return updated;
+        }
+        return m;
+      })
     );
   };
 
   const deleteMatch = (id: string) => {
     setMatches((prev) => prev.filter((m) => m.id !== id));
+    deleteDoc(doc(db, 'matches', id)).catch(console.error);
     if (selectedMatchId === id) {
       const remaining = matches.filter((m) => m.id !== id);
       setSelectedMatchId(remaining[0]?.id || null);
@@ -227,7 +359,11 @@ export const FootballProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const updateClubInfo = (info: Partial<ClubInfo>) => {
-    setClubInfo((prev) => ({ ...prev, ...info }));
+    setClubInfo((prev) => {
+      const next = { ...prev, ...info };
+      setDoc(doc(db, 'club', 'info'), next, { merge: true }).catch(console.error);
+      return next;
+    });
   };
 
   // Tactical management
@@ -561,21 +697,49 @@ export const FootballProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     localStorage.removeItem(STORAGE_KEY_CLUB);
     localStorage.removeItem(STORAGE_KEY_ACTIVE_CATEGORY);
     localStorage.removeItem(STORAGE_KEY_STAFF_BY_CAT);
+
+    try {
+      const batch = writeBatch(db);
+      INITIAL_PLAYERS.forEach((p) => {
+        batch.set(doc(db, 'players', p.id), p);
+      });
+      INITIAL_MATCHES.forEach((m) => {
+        batch.set(doc(db, 'matches', m.id), m);
+      });
+      batch.set(doc(db, 'club', 'info'), INITIAL_CLUB_INFO);
+      Object.entries(INITIAL_STAFF_BY_CATEGORY).forEach(([cat, staff]) => {
+        batch.set(doc(db, 'staff', cat), staff);
+      });
+      batch.commit().catch(console.error);
+    } catch (e) {
+      console.error('Error resetting Firestore data:', e);
+    }
   };
 
   const exportDatabaseJson = () => {
+    let usersData = [];
+    try {
+      const savedUsers = localStorage.getItem('san_luis_users_v2');
+      if (savedUsers) usersData = JSON.parse(savedUsers);
+    } catch {
+      usersData = [];
+    }
+
     const data = {
-      version: 1,
+      version: 2,
       exportDate: new Date().toISOString(),
       clubInfo,
       players,
       matches,
+      categoryStaff,
+      activeCategory,
+      users: usersData
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `dt_futbol_backup_${clubInfo.name.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `san_luis_datos_${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -583,18 +747,43 @@ export const FootballProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const importDatabaseJson = (jsonString: string): boolean => {
     try {
       const data = JSON.parse(jsonString);
+      const batch = writeBatch(db);
+
       if (data.players && Array.isArray(data.players)) {
         setPlayers(data.players);
+        data.players.forEach((p: Player) => {
+          if (p.id) batch.set(doc(db, 'players', p.id), p);
+        });
       }
       if (data.matches && Array.isArray(data.matches)) {
         setMatches(data.matches);
+        data.matches.forEach((m: MatchSheet) => {
+          if (m.id) batch.set(doc(db, 'matches', m.id), m);
+        });
         if (data.matches.length > 0) {
           setSelectedMatchId(data.matches[0].id);
         }
       }
       if (data.clubInfo && typeof data.clubInfo === 'object') {
         setClubInfo(data.clubInfo);
+        batch.set(doc(db, 'club', 'info'), data.clubInfo);
       }
+      if (data.categoryStaff && typeof data.categoryStaff === 'object') {
+        setCategoryStaff(data.categoryStaff);
+        Object.entries(data.categoryStaff).forEach(([cat, staff]) => {
+          batch.set(doc(db, 'staff', cat), staff as CoachStaff);
+        });
+      }
+      if (data.activeCategory && typeof data.activeCategory === 'string') {
+        setActiveCategoryState(data.activeCategory);
+      }
+      if (data.users && Array.isArray(data.users)) {
+        localStorage.setItem('san_luis_users_v2', JSON.stringify(data.users));
+        data.users.forEach((u: any) => {
+          if (u.id) batch.set(doc(db, 'users', u.id), u);
+        });
+      }
+      batch.commit().catch(console.error);
       return true;
     } catch (e) {
       console.error('Error importing JSON database:', e);

@@ -1,43 +1,27 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { ClubCategory, CLUB_CATEGORIES } from '../../types/football';
-import { UserRole } from '../../types/auth';
+import { CategoryGroup, UserRole } from '../../types/auth';
+import { SanLuisLogo } from '../Common/SanLuisLogo';
 import { 
   Shield, 
   LogIn, 
   UserPlus, 
-  CheckCircle2, 
   AlertCircle, 
-  KeyRound, 
   Mail, 
   User, 
   Briefcase, 
-  FolderGit2,
-  ChevronRight,
-  Sparkles,
-  Lock
+  Lock,
+  Sparkles
 } from 'lucide-react';
 
 const ROLE_OPTIONS: UserRole[] = [
+  'Coordinador General',
   'Director Técnico',
   'Ayudante Técnico',
   'Preparador Físico',
   'Preparador de Arqueros',
   'Kinesiólogo',
-  'Coordinador General',
   'Analista Táctico'
-];
-
-const AVATAR_COLORS = [
-  'bg-emerald-600',
-  'bg-amber-500',
-  'bg-blue-600',
-  'bg-purple-600',
-  'bg-rose-600',
-  'bg-cyan-600',
-  'bg-teal-600',
-  'bg-indigo-600',
-  'bg-orange-600'
 ];
 
 interface LoginScreenProps {
@@ -45,9 +29,10 @@ interface LoginScreenProps {
 }
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
-  const { login, registerUser, quickLogin, users } = useAuth();
+  const { login, registerUser, users } = useAuth();
 
-  const [mode, setMode] = useState<'login' | 'register'>('login');
+  // If no users exist, default directly to creating the first user from scratch
+  const [mode, setMode] = useState<'login' | 'register'>(users.length === 0 ? 'register' : 'login');
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -57,8 +42,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
   const [regName, setRegName] = useState('');
   const [regEmail, setRegEmail] = useState('');
   const [regPassword, setRegPassword] = useState('');
-  const [regRole, setRegRole] = useState<UserRole>('Director Técnico');
-  const [regCategory, setRegCategory] = useState<ClubCategory | 'Todas'>('Sub 14');
+  const [regRole, setRegRole] = useState<UserRole>('Coordinador General');
+  const [regCategory, setRegCategory] = useState<CategoryGroup>('Todas');
   const [regPhone, setRegPhone] = useState('');
 
   const handleLoginSubmit = (e: React.FormEvent) => {
@@ -71,14 +56,14 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
       return;
     }
 
-    const matchedUser = users.find(
+    const foundUser = users.find(
       (u) =>
         u.email.toLowerCase() === identifier.trim().toLowerCase() ||
         u.name.toLowerCase() === identifier.trim().toLowerCase()
     );
 
-    if (onLoginSuccess && matchedUser) {
-      onLoginSuccess(matchedUser.category);
+    if (onLoginSuccess && foundUser) {
+      onLoginSuccess(foundUser.category);
     }
   };
 
@@ -86,7 +71,13 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
     e.preventDefault();
     setError(null);
 
-    const randomColor = AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)];
+    if (!regPassword) {
+      setError('Por favor define una contraseña para la cuenta');
+      return;
+    }
+
+    const colors = ['bg-amber-500', 'bg-emerald-600', 'bg-blue-600', 'bg-purple-600', 'bg-rose-600', 'bg-teal-600'];
+    const randomColor = colors[Math.floor(Math.random() * colors.length)];
 
     const res = registerUser({
       name: regName,
@@ -108,33 +99,23 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
     }
   };
 
-  const handleQuickLogin = (userId: string) => {
-    const user = users.find((u) => u.id === userId);
-    quickLogin(userId);
-    if (onLoginSuccess && user) {
-      onLoginSuccess(user.category);
-    }
-  };
-
   return (
     <div className="min-h-screen bg-slate-950 flex flex-col justify-center items-center px-4 py-8 relative overflow-hidden font-sans">
       {/* Background ambient glow */}
       <div className="absolute top-1/4 -left-32 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-1/4 -right-32 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute bottom-1/4 -right-32 w-96 h-96 bg-yellow-500/10 rounded-full blur-3xl pointer-events-none" />
 
-      {/* Brand Header */}
-      <div className="w-full max-w-md text-center mb-6 z-10">
-        <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-amber-400 text-slate-950 font-black text-2xl shadow-xl shadow-amber-500/20 ring-4 ring-amber-300/30 border-2 border-slate-950 mb-4 transition-transform hover:scale-105 duration-200">
-          SLQ
-        </div>
-        <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+      {/* Brand Header with Official Club Emblem */}
+      <div className="w-full max-w-md text-center mb-6 z-10 flex flex-col items-center">
+        <SanLuisLogo className="w-24 h-28 mb-3 hover:scale-105 transition-transform duration-200" />
+        <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight uppercase">
           San Luis de Quillota
         </h1>
-        <p className="text-sm font-semibold text-amber-400 mt-1 uppercase tracking-wider">
-          Fútbol Joven y Formativo
+        <p className="text-xs sm:text-sm font-bold text-amber-400 mt-1 uppercase tracking-wider">
+          Fútbol Joven y Formativo • Temporada 2026
         </p>
         <p className="text-xs text-slate-400 mt-1">
-          Sistema de Planillas, Pizarra Táctica y Base de Datos por Categoría
+          Plataforma de Planillas Oficiales, Planificación y Estadísticas
         </p>
       </div>
 
@@ -174,6 +155,19 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
           </button>
         </div>
 
+        {/* First User Welcome Hint */}
+        {users.length === 0 && (
+          <div className="mb-5 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-start gap-2.5">
+            <Sparkles className="w-4 h-4 shrink-0 text-amber-400 mt-0.5" />
+            <div>
+              <p className="font-bold">Comienza desde cero:</p>
+              <p className="text-slate-300 text-[11px] mt-0.5">
+                Crea tu primera cuenta de Coordinador General o Director Técnico para acceder al sistema.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Error message */}
         {error && (
           <div className="mb-5 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
@@ -198,7 +192,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                   required
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
-                  placeholder="ej: dt.sub14@sanluis.cl o Marcelo Bravo"
+                  placeholder="Tu correo o nombre de usuario"
                   className="w-full pl-9 pr-3 py-2.5 bg-slate-950 border border-slate-700/80 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-amber-400 transition-all"
                 />
               </div>
@@ -258,7 +252,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                   required
                   value={regName}
                   onChange={(e) => setRegName(e.target.value)}
-                  placeholder="ej: Prof. Carlos Muñoz"
+                  placeholder="ej: Juan Pérez"
                   className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-700/80 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-400 transition-all"
                 />
               </div>
@@ -272,7 +266,13 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                 <div className="relative">
                   <select
                     value={regRole}
-                    onChange={(e) => setRegRole(e.target.value as UserRole)}
+                    onChange={(e) => {
+                      const newRole = e.target.value as UserRole;
+                      setRegRole(newRole);
+                      if (newRole === 'Coordinador General') {
+                        setRegCategory('Todas');
+                      }
+                    }}
                     className="w-full py-2 px-3 bg-slate-950 border border-slate-700/80 rounded-xl text-xs text-white focus:outline-none focus:ring-2 focus:ring-amber-400"
                   >
                     {ROLE_OPTIONS.map((r) => (
@@ -290,15 +290,15 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                 </label>
                 <select
                   value={regCategory}
-                  onChange={(e) => setRegCategory(e.target.value as ClubCategory | 'Todas')}
+                  onChange={(e) => setRegCategory(e.target.value as CategoryGroup)}
                   className="w-full py-2 px-3 bg-slate-950 border border-amber-400/50 rounded-xl text-xs font-bold text-amber-300 focus:outline-none focus:ring-2 focus:ring-amber-400"
                 >
-                  <option value="Todas">Todas (Coordinador)</option>
-                  {CLUB_CATEGORIES.map((cat) => (
-                    <option key={cat} value={cat}>
-                      {cat}
-                    </option>
-                  ))}
+                  <option value="Todas">Todas (Coordinador General)</option>
+                  <option value="Sub 11-12">Sub 11 - 12 (Infantil Inicial)</option>
+                  <option value="Sub 13-14">Sub 13 - 14 (Infantil / Formativa)</option>
+                  <option value="Sub 15-16">Sub 15 - 16 (Cadetes / Juvenil Inicial)</option>
+                  <option value="Sub 18">Sub 18 (Proyección)</option>
+                  <option value="Sub 20">Sub 20 (Reserva / Proyección)</option>
                 </select>
               </div>
             </div>
@@ -316,7 +316,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                   required
                   value={regEmail}
                   onChange={(e) => setRegEmail(e.target.value)}
-                  placeholder="ej: dt.sub15@sanluis.cl o cmunoz"
+                  placeholder="ej: dt.infantil@sanluis.cl o jperez"
                   className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-700/80 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-400 transition-all"
                 />
               </div>
@@ -335,66 +335,34 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                   required
                   value={regPassword}
                   onChange={(e) => setRegPassword(e.target.value)}
-                  placeholder="Crea una contraseña"
+                  placeholder="Define tu contraseña"
                   className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-700/80 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-400 transition-all"
                 />
               </div>
             </div>
 
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1 uppercase tracking-wider">
+                Teléfono de Contacto (opcional)
+              </label>
+              <input
+                type="text"
+                value={regPhone}
+                onChange={(e) => setRegPhone(e.target.value)}
+                placeholder="+56 9 ..."
+                className="w-full px-3 py-2 bg-slate-950 border border-slate-700/80 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-400 transition-all"
+              />
+            </div>
+
             <button
               type="submit"
-              className="w-full mt-2 py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-xl text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition-all cursor-pointer hover:scale-[1.01]"
+              className="w-full mt-2 py-3 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black rounded-xl text-sm flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20 transition-all cursor-pointer hover:scale-[1.01]"
             >
               <UserPlus className="w-4 h-4" />
-              Crear Cuenta y Entrar
+              Crear Cuenta e Iniciar
             </button>
           </form>
         )}
-
-        {/* QUICK ACCESS BAR FOR COACHES */}
-        <div className="mt-6 pt-5 border-t border-slate-800">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-              Acceso Rápido por Técnico
-            </span>
-            <span className="text-[10px] text-slate-500">1-clic directo</span>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            {users.slice(0, 6).map((u) => (
-              <button
-                key={u.id}
-                type="button"
-                onClick={() => handleQuickLogin(u.id)}
-                className="flex items-center gap-2 p-2 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800/80 hover:border-amber-400/40 text-left transition-all cursor-pointer group"
-              >
-                <div className={`w-7 h-7 rounded-lg ${u.avatarColor} text-white font-black text-xs flex items-center justify-center shrink-0`}>
-                  {u.name.charAt(0)}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs font-bold text-white truncate group-hover:text-amber-300">
-                    {u.name}
-                  </p>
-                  <p className="text-[10px] text-amber-400 font-semibold truncate">
-                    {u.category !== 'Todas' ? u.category : u.role}
-                  </p>
-                </div>
-              </button>
-            ))}
-          </div>
-
-          {/* Preset hint footer */}
-          <div className="mt-3.5 bg-slate-950/60 p-2.5 rounded-lg border border-slate-800/60 text-[11px] text-slate-400 flex items-start gap-2">
-            <KeyRound className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
-            <div>
-              <span className="text-slate-300 font-medium">Cuentas creadas: </span>
-              <span className="text-amber-300 font-mono">dt.sub14@sanluis.cl</span> (clave: <span className="font-mono">sub14</span>), 
-              <span className="text-amber-300 font-mono"> dt.sub16@sanluis.cl</span> (clave: <span className="font-mono">sub16</span>), 
-              <span className="text-amber-300 font-mono"> coordinacion@sanluis.cl</span> (clave: <span className="font-mono">sanluis2026</span>).
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* Footer Branding */}

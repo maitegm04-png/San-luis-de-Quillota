@@ -1,7 +1,11 @@
 import React, { useState } from 'react';
 import { DominantFoot, Player, PlayerStatus, Position } from '../../types/football';
 import { useFootball } from '../../context/FootballContext';
-import { X, Save, Shield } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
+import { getAllowedCategories } from '../../types/auth';
+import { CLUB_CATEGORIES } from '../../types/football';
+import { X, Save, Shield, Camera, Upload, Trash2, Image as ImageIcon } from 'lucide-react';
+import { compressImageForPlayer } from '../../services/firebaseQuotaGuard';
 
 interface PlayerFormModalProps {
   playerToEdit?: Player | null;
@@ -29,6 +33,15 @@ const AVATAR_COLORS = [
 
 export const PlayerFormModal: React.FC<PlayerFormModalProps> = ({ playerToEdit, onClose }) => {
   const { addPlayer, updatePlayer, clubInfo, activeCategory } = useFootball();
+  const { currentUser } = useAuth();
+
+  const isCoordinator = currentUser?.role === 'Coordinador General' || currentUser?.category === 'Todas';
+  const allowedCategories = getAllowedCategories(currentUser?.category);
+  const availableCategories = isCoordinator ? CLUB_CATEGORIES : allowedCategories;
+
+  const defaultCategory = playerToEdit?.category || (
+    availableCategories.includes(activeCategory as any) ? activeCategory : availableCategories[0]
+  );
 
   const [squadNumber, setSquadNumber] = useState<number>(playerToEdit?.squadNumber || 10);
   const [firstName, setFirstName] = useState<string>(playerToEdit?.firstName || '');
@@ -36,8 +49,8 @@ export const PlayerFormModal: React.FC<PlayerFormModalProps> = ({ playerToEdit, 
   const [nickname, setNickname] = useState<string>(playerToEdit?.nickname || '');
   const [primaryPosition, setPrimaryPosition] = useState<Position>(playerToEdit?.primaryPosition || 'MC');
   const [secondaryPosition, setSecondaryPosition] = useState<Position | ''>(playerToEdit?.secondaryPosition || '');
-  const [category, setCategory] = useState<string>(playerToEdit?.category || (activeCategory !== 'all' ? activeCategory : 'Sub 14'));
-  const [birthDate, setBirthDate] = useState<string>(playerToEdit?.birthDate || '2000-01-01');
+  const [category, setCategory] = useState<string>(defaultCategory);
+  const [birthDate, setBirthDate] = useState<string>(playerToEdit?.birthDate || '2008-01-01');
   const [dominantFoot, setDominantFoot] = useState<DominantFoot>(playerToEdit?.dominantFoot || 'Derecho');
   const [heightCm, setHeightCm] = useState<number>(playerToEdit?.heightCm || 180);
   const [weightKg, setWeightKg] = useState<number>(playerToEdit?.weightKg || 75);
@@ -48,6 +61,29 @@ export const PlayerFormModal: React.FC<PlayerFormModalProps> = ({ playerToEdit, 
   const [email, setEmail] = useState<string>(playerToEdit?.email || '');
   const [notes, setNotes] = useState<string>(playerToEdit?.notes || '');
   const [avatarColor, setAvatarColor] = useState<string>(playerToEdit?.avatarColor || '#10b981');
+  const [photoUrl, setPhotoUrl] = useState<string>(playerToEdit?.photoUrl || '');
+  const [isCompressingPhoto, setIsCompressingPhoto] = useState<boolean>(false);
+
+  const handlePhotoFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      setIsCompressingPhoto(true);
+      const compressed = await compressImageForPlayer(file, 260, 260, 0.78);
+      setPhotoUrl(compressed);
+    } catch (err) {
+      console.error('Error comprimiendo foto:', err);
+      alert('No se pudo cargar la imagen. Intente con otra foto en formato JPG o PNG.');
+    } finally {
+      setIsCompressingPhoto(false);
+      // Reset input value so user can re-select same file if needed
+      e.target.value = '';
+    }
+  };
+
+  const handleRemovePhoto = () => {
+    setPhotoUrl('');
+  };
 
   // Attributes
   const [pace, setPace] = useState<number>(playerToEdit?.attributes.pace || 75);
@@ -84,6 +120,7 @@ export const PlayerFormModal: React.FC<PlayerFormModalProps> = ({ playerToEdit, 
       email: email.trim() || undefined,
       notes: notes.trim() || undefined,
       avatarColor,
+      photoUrl: photoUrl.trim() || undefined,
       attributes: {
         pace: Number(pace),
         shooting: Number(shooting),
@@ -125,6 +162,78 @@ export const PlayerFormModal: React.FC<PlayerFormModalProps> = ({ playerToEdit, 
 
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="p-6 space-y-6 max-h-[75vh] overflow-y-auto">
+          {/* Photo Section */}
+          <div className="bg-slate-950/80 p-4 rounded-xl border border-slate-800">
+            <div className="flex flex-col sm:flex-row items-center gap-4">
+              {/* Photo Preview / Fallback Avatar */}
+              <div className="relative shrink-0">
+                {photoUrl ? (
+                  <div className="relative group">
+                    <img
+                      src={photoUrl}
+                      alt="Foto de perfil"
+                      className="w-20 h-20 rounded-2xl object-cover border-2 border-amber-400 shadow-lg"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleRemovePhoto}
+                      title="Eliminar foto"
+                      className="absolute -top-1.5 -right-1.5 p-1 bg-rose-600 hover:bg-rose-500 text-white rounded-full shadow cursor-pointer transition-transform hover:scale-110"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <div
+                    className="w-20 h-20 rounded-2xl flex flex-col items-center justify-center border-2 border-dashed border-slate-700 bg-slate-900 text-slate-400 shadow-inner"
+                    style={{ backgroundColor: avatarColor }}
+                  >
+                    <span className="text-xl font-black text-white/90">#{squadNumber || 10}</span>
+                    <span className="text-[10px] font-bold text-white/70 uppercase">Sin Foto</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Upload Controls */}
+              <div className="flex-1 text-center sm:text-left space-y-2">
+                <div className="flex items-center gap-2 justify-center sm:justify-start">
+                  <Camera className="w-4 h-4 text-amber-400" />
+                  <h4 className="text-xs font-bold text-white uppercase tracking-wider">
+                    Foto Oficial del Jugador
+                  </h4>
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  Sube una foto del futbolista desde tu dispositivo. Se comprime automáticamente a menos de 30KB para mantener la base de datos veloz y sin cargos de almacenamiento.
+                </p>
+
+                <div className="flex items-center gap-2 flex-wrap justify-center sm:justify-start pt-1">
+                  <label className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold rounded-lg text-xs cursor-pointer shadow transition-all hover:scale-[1.02]">
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>{isCompressingPhoto ? 'Procesando...' : photoUrl ? 'Cambiar Foto' : 'Subir Foto'}</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handlePhotoFileChange}
+                      disabled={isCompressingPhoto}
+                      className="hidden"
+                    />
+                  </label>
+
+                  {photoUrl && (
+                    <button
+                      type="button"
+                      onClick={handleRemovePhoto}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-slate-800 hover:bg-rose-950/40 text-slate-300 hover:text-rose-400 border border-slate-700 hover:border-rose-800 rounded-lg text-xs font-semibold cursor-pointer transition-colors"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Quitar</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Identity Section */}
           <div>
             <h3 className="text-xs font-bold text-emerald-400 uppercase tracking-wider mb-3">
@@ -277,14 +386,9 @@ export const PlayerFormModal: React.FC<PlayerFormModalProps> = ({ playerToEdit, 
                   onChange={(e) => setCategory(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-amber-400 font-bold focus:outline-amber-500"
                 >
-                  <option value="Sub 11">Sub 11</option>
-                  <option value="Sub 12">Sub 12</option>
-                  <option value="Sub 13">Sub 13</option>
-                  <option value="Sub 14">Sub 14</option>
-                  <option value="Sub 15">Sub 15</option>
-                  <option value="Sub 16">Sub 16</option>
-                  <option value="Sub 18">Sub 18</option>
-                  <option value="Sub 20">Sub 20</option>
+                  {availableCategories.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
                 </select>
               </div>
             </div>

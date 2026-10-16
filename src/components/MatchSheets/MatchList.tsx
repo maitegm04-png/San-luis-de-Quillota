@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
-import { MatchCompetition, MatchSheet, MatchStatus } from '../../types/football';
+import { MatchCompetition, MatchSheet, MatchStatus, matchesCategoryFilter } from '../../types/football';
 import { useFootball } from '../../context/FootballContext';
+import { useAuth } from '../../context/AuthContext';
+import { getAllowedCategories } from '../../types/auth';
 import { MatchDetail } from './MatchDetail';
 import { 
   FileSpreadsheet, 
@@ -21,15 +23,23 @@ interface MatchListProps {
 
 export const MatchList: React.FC<MatchListProps> = ({ onOpenNewMatch }) => {
   const { matches, selectedMatchId, setSelectedMatchId, clubInfo, activeCategory, setActiveCategory, getCategoryStaff } = useFootball();
+  const { currentUser } = useAuth();
+
+  const isCoordinator = currentUser?.role === 'Coordinador General' || currentUser?.category === 'Todas';
+  const allowedCategories = getAllowedCategories(currentUser?.category);
 
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [competitionFilter, setCompetitionFilter] = useState<string>('all');
   const categoryFilter = activeCategory;
 
   const filteredMatches = matches.filter((m) => {
+    // Role based scoping
+    if (!isCoordinator && !allowedCategories.includes(m.category as any)) {
+      return false;
+    }
     const matchesStatus = statusFilter === 'all' || m.status === statusFilter;
     const matchesComp = competitionFilter === 'all' || m.competition === competitionFilter;
-    const matchesCategory = categoryFilter === 'all' || m.category === categoryFilter;
+    const matchesCategory = matchesCategoryFilter(m.category, categoryFilter);
     return matchesStatus && matchesComp && matchesCategory;
   });
 

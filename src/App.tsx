@@ -8,9 +8,11 @@ import { MatchList } from './components/MatchSheets/MatchList';
 import { MatchFormModal } from './components/MatchSheets/MatchFormModal';
 import { TacticalBoard } from './components/Tactics/TacticalBoard';
 import { ClubStats } from './components/StatsDashboard/ClubStats';
+import { WeeklyPlanningDashboard } from './components/Planning/WeeklyPlanningDashboard';
 import { ClubSettingsModal } from './components/ClubSettingsModal';
 import { LoginScreen } from './components/Auth/LoginScreen';
 import { UserManagementModal } from './components/Auth/UserManagementModal';
+import { SanLuisLogo } from './components/Common/SanLuisLogo';
 import { Shield } from 'lucide-react';
 
 function FootballApp() {
@@ -64,6 +66,10 @@ function FootballApp() {
           <TacticalBoard />
         )}
 
+        {activeTab === 'planning' && (
+          <WeeklyPlanningDashboard />
+        )}
+
         {activeTab === 'stats' && (
           <ClubStats />
         )}
@@ -73,9 +79,7 @@ function FootballApp() {
       <footer className="border-t border-slate-900 bg-slate-950/80 py-6 text-xs text-slate-500 print:hidden">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <div className="w-5 h-5 rounded-md bg-emerald-600/80 flex items-center justify-center text-white">
-              <Shield className="w-3 h-3" />
-            </div>
+            <SanLuisLogo className="w-6 h-6" />
             <span>
               <strong>{clubInfo.name}</strong> • {clubInfo.category} ({clubInfo.season})
             </span>

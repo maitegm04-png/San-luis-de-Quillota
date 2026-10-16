@@ -1,0 +1,44 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper to validate document IDs
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 64;
+    }
+
+    // Players collection
+    match /players/{playerId} {
+      allow read, write: if isValidId(playerId);
+    }
+
+    // Match sheets collection
+    match /matches/{matchId} {
+      allow read, write: if isValidId(matchId);
+    }
+
+    // Club configuration
+    match /club/{docId} {
+      allow read, write: if isValidId(docId);
+    }
+
+    // Staff per category
+    match /staff/{categoryId} {
+      allow read, write: if isValidId(categoryId);
+    }
+
+    // Users collection
+    match /users/{userId} {
+      allow read, write: if isValidId(userId);
+    }
+
+    // Weekly planning collection
+    match /weekly_plans/{planId} {
+      allow read, write: if isValidId(planId);
+    }
+
+    // Connection testing
+    match /test/{docId} {
+      allow read, write: if isValidId(docId);
+    }
+  }
+}
