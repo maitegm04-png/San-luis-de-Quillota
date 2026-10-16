@@ -28,7 +28,7 @@ const AVATAR_COLORS = [
 ];
 
 export const PlayerFormModal: React.FC<PlayerFormModalProps> = ({ playerToEdit, onClose }) => {
-  const { addPlayer, updatePlayer, clubInfo } = useFootball();
+  const { addPlayer, updatePlayer, clubInfo, activeCategory } = useFootball();
 
   const [squadNumber, setSquadNumber] = useState<number>(playerToEdit?.squadNumber || 10);
   const [firstName, setFirstName] = useState<string>(playerToEdit?.firstName || '');
@@ -36,7 +36,7 @@ export const PlayerFormModal: React.FC<PlayerFormModalProps> = ({ playerToEdit, 
   const [nickname, setNickname] = useState<string>(playerToEdit?.nickname || '');
   const [primaryPosition, setPrimaryPosition] = useState<Position>(playerToEdit?.primaryPosition || 'MC');
   const [secondaryPosition, setSecondaryPosition] = useState<Position | ''>(playerToEdit?.secondaryPosition || '');
-  const [category, setCategory] = useState<string>(playerToEdit?.category || clubInfo.category || 'Primer Equipo');
+  const [category, setCategory] = useState<string>(playerToEdit?.category || (activeCategory !== 'all' ? activeCategory : 'Sub 14'));
   const [birthDate, setBirthDate] = useState<string>(playerToEdit?.birthDate || '2000-01-01');
   const [dominantFoot, setDominantFoot] = useState<DominantFoot>(playerToEdit?.dominantFoot || 'Derecho');
   const [heightCm, setHeightCm] = useState<number>(playerToEdit?.heightCm || 180);

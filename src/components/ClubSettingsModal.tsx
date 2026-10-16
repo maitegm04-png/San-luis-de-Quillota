@@ -5,10 +5,20 @@ import { X, Save, Download, Upload, RotateCcw, Shield, CheckCircle2 } from 'luci
 
 interface ClubSettingsModalProps {
   onClose: () => void;
+  onOpenUsers?: () => void;
 }
 
-export const ClubSettingsModal: React.FC<ClubSettingsModalProps> = ({ onClose }) => {
-  const { clubInfo, updateClubInfo, exportDatabaseJson, importDatabaseJson, resetToDefaultData } = useFootball();
+export const ClubSettingsModal: React.FC<ClubSettingsModalProps> = ({ onClose, onOpenUsers }) => {
+  const { 
+    clubInfo, 
+    updateClubInfo, 
+    exportDatabaseJson, 
+    importDatabaseJson, 
+    resetToDefaultData,
+    activeCategory,
+    getCategoryStaff,
+    updateCategoryStaff
+  } = useFootball();
 
   const [name, setName] = useState(clubInfo.name);
   const [shortName, setShortName] = useState(clubInfo.shortName);
@@ -17,19 +27,57 @@ export const ClubSettingsModal: React.FC<ClubSettingsModalProps> = ({ onClose })
   const [season, setSeason] = useState(clubInfo.season);
   const [federationId, setFederationId] = useState(clubInfo.federationId || '');
 
-  // 7 Coaching Staff Roles: Entrenador, Ayudante Técnico, PF, PA, KIN, UT, COORD
-  const [coach, setCoach] = useState(clubInfo.coachStaff.coach);
-  const [assistantCoach, setAssistantCoach] = useState(clubInfo.coachStaff.assistantCoach);
-  const [physicalTrainer, setPhysicalTrainer] = useState(clubInfo.coachStaff.physicalTrainer);
-  const [goalkeeperCoach, setGoalkeeperCoach] = useState(clubInfo.coachStaff.goalkeeperCoach);
-  const [kinesiologist, setKinesiologist] = useState(clubInfo.coachStaff.kinesiologist);
-  const [kitManager, setKitManager] = useState(clubInfo.coachStaff.kitManager);
-  const [coordinator, setCoordinator] = useState(clubInfo.coachStaff.coordinator);
+  // Category specific technical staff
+  const [staffCategory, setStaffCategory] = useState<string>(activeCategory !== 'all' ? activeCategory : 'Sub 14');
+  const initialStaff = getCategoryStaff(activeCategory !== 'all' ? activeCategory : 'Sub 14');
+
+  const [coach, setCoach] = useState(initialStaff.coach);
+  const [assistantCoach, setAssistantCoach] = useState(initialStaff.assistantCoach);
+  const [physicalTrainer, setPhysicalTrainer] = useState(initialStaff.physicalTrainer);
+  const [goalkeeperCoach, setGoalkeeperCoach] = useState(initialStaff.goalkeeperCoach);
+  const [kinesiologist, setKinesiologist] = useState(initialStaff.kinesiologist);
+  const [kitManager, setKitManager] = useState(initialStaff.kitManager);
+  const [coordinator, setCoordinator] = useState(initialStaff.coordinator);
 
   const [importStatus, setImportStatus] = useState<string | null>(null);
 
+  const handleStaffCategoryChange = (newCat: string) => {
+    // Save current before switching
+    updateCategoryStaff(staffCategory, {
+      coach: coach.trim(),
+      assistantCoach: assistantCoach.trim(),
+      physicalTrainer: physicalTrainer.trim(),
+      goalkeeperCoach: goalkeeperCoach.trim(),
+      kinesiologist: kinesiologist.trim(),
+      kitManager: kitManager.trim(),
+      coordinator: coordinator.trim(),
+    });
+
+    setStaffCategory(newCat);
+    const nextStaff = getCategoryStaff(newCat);
+    setCoach(nextStaff.coach);
+    setAssistantCoach(nextStaff.assistantCoach);
+    setPhysicalTrainer(nextStaff.physicalTrainer);
+    setGoalkeeperCoach(nextStaff.goalkeeperCoach);
+    setKinesiologist(nextStaff.kinesiologist);
+    setKitManager(nextStaff.kitManager);
+    setCoordinator(nextStaff.coordinator);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const staffData = {
+      coach: coach.trim(),
+      assistantCoach: assistantCoach.trim(),
+      physicalTrainer: physicalTrainer.trim(),
+      goalkeeperCoach: goalkeeperCoach.trim(),
+      kinesiologist: kinesiologist.trim(),
+      kitManager: kitManager.trim(),
+      coordinator: coordinator.trim(),
+    };
+
+    updateCategoryStaff(staffCategory, staffData);
+
     updateClubInfo({
       name: name.trim(),
       shortName: shortName.trim(),
@@ -37,15 +85,7 @@ export const ClubSettingsModal: React.FC<ClubSettingsModalProps> = ({ onClose })
       stadium: stadium.trim(),
       season: season.trim(),
       federationId: federationId.trim() || undefined,
-      coachStaff: {
-        coach: coach.trim(),
-        assistantCoach: assistantCoach.trim(),
-        physicalTrainer: physicalTrainer.trim(),
-        goalkeeperCoach: goalkeeperCoach.trim(),
-        kinesiologist: kinesiologist.trim(),
-        kitManager: kitManager.trim(),
-        coordinator: coordinator.trim(),
-      },
+      coachStaff: staffData,
     });
     onClose();
   };
@@ -168,11 +208,31 @@ export const ClubSettingsModal: React.FC<ClubSettingsModalProps> = ({ onClose })
 
           {/* Coaching Staff (7 Roles) */}
           <div>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-bold text-amber-400 uppercase tracking-wider">
-                2. Cuerpo Técnico Predeterminado (7 Cargos)
-              </h3>
-              <span className="text-[10px] text-slate-400">Se pre-cargan en cada nuevo partido</span>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+              <div>
+                <h3 className="font-bold text-amber-400 uppercase tracking-wider">
+                  2. Cuerpo Técnico por Categoría ({staffCategory})
+                </h3>
+                <span className="text-[10px] text-slate-400">Cada categoría tiene su cuerpo técnico independiente</span>
+              </div>
+
+              {/* Category pill switcher */}
+              <div className="flex items-center gap-1 flex-wrap">
+                {CLUB_CATEGORIES.map((cat) => (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => handleStaffCategoryChange(cat)}
+                    className={`px-2 py-0.5 text-[10px] rounded-md font-bold transition-colors cursor-pointer ${
+                      staffCategory === cat
+                        ? 'bg-amber-400 text-slate-950 shadow-sm'
+                        : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 bg-slate-950 p-4 rounded-xl border border-slate-800">
@@ -286,6 +346,25 @@ export const ClubSettingsModal: React.FC<ClubSettingsModalProps> = ({ onClose })
               <p className="mt-2 text-emerald-400 font-semibold text-center">
                 {importStatus}
               </p>
+            )}
+
+            {onOpenUsers && (
+              <div className="mt-4 pt-4 border-t border-slate-800/60 flex items-center justify-between">
+                <div>
+                  <p className="font-bold text-slate-300">Cuerpos Técnicos y Usuarios</p>
+                  <p className="text-[11px] text-slate-500">Administra o crea cuentas para los DTs y preparadores de cada categoría.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onOpenUsers();
+                  }}
+                  className="px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 rounded-lg font-bold text-xs cursor-pointer shadow-md"
+                >
+                  Gestionar Usuarios
+                </button>
+              </div>
             )}
 
             <div className="mt-4 pt-4 border-t border-slate-800/60 flex items-center justify-between">

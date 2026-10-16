@@ -20,11 +20,11 @@ interface MatchListProps {
 }
 
 export const MatchList: React.FC<MatchListProps> = ({ onOpenNewMatch }) => {
-  const { matches, selectedMatchId, setSelectedMatchId, clubInfo } = useFootball();
+  const { matches, selectedMatchId, setSelectedMatchId, clubInfo, activeCategory, setActiveCategory, getCategoryStaff } = useFootball();
 
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [competitionFilter, setCompetitionFilter] = useState<string>('all');
-  const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const categoryFilter = activeCategory;
 
   const filteredMatches = matches.filter((m) => {
     const matchesStatus = statusFilter === 'all' || m.status === statusFilter;
@@ -33,7 +33,9 @@ export const MatchList: React.FC<MatchListProps> = ({ onOpenNewMatch }) => {
     return matchesStatus && matchesComp && matchesCategory;
   });
 
-  const selectedMatch = matches.find((m) => m.id === selectedMatchId) || matches[0];
+  // Ensure the selected match belongs to the filtered set
+  const selectedMatch = filteredMatches.find((m) => m.id === selectedMatchId) || filteredMatches[0] || null;
+  const currentStaff = getCategoryStaff(activeCategory);
 
   return (
     <div className="space-y-6">
@@ -63,18 +65,18 @@ export const MatchList: React.FC<MatchListProps> = ({ onOpenNewMatch }) => {
         <div className="space-y-2 mt-4 pt-4 border-t border-slate-800/80 text-xs">
           {/* Category Filter */}
           <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-slate-400 font-bold mr-1">Categoría:</span>
-            {['all', 'Sub 11', 'Sub 12', 'Sub 13', 'Sub 14', 'Sub 15', 'Sub 16', 'Sub 18', 'Sub 20'].map((cat) => (
+            <span className="text-amber-400 font-bold mr-1">Filtrar por Categoría:</span>
+            {['Sub 11', 'Sub 12', 'Sub 13', 'Sub 14', 'Sub 15', 'Sub 16', 'Sub 18', 'Sub 20', 'all'].map((cat) => (
               <button
                 key={cat}
-                onClick={() => setCategoryFilter(cat)}
-                className={`px-2.5 py-1 rounded-lg font-bold transition-colors ${
+                onClick={() => setActiveCategory(cat)}
+                className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
                   categoryFilter === cat
-                    ? 'bg-amber-400 text-slate-950 shadow-sm'
+                    ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-950/40 ring-1 ring-amber-300'
                     : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
                 }`}
               >
-                {cat === 'all' ? 'Todas las Categorías' : cat}
+                {cat === 'all' ? 'Ver Todas' : cat}
               </button>
             ))}
           </div>
@@ -91,7 +93,7 @@ export const MatchList: React.FC<MatchListProps> = ({ onOpenNewMatch }) => {
               <button
                 key={item.id}
                 onClick={() => setStatusFilter(item.id)}
-                className={`px-2.5 py-1 rounded-lg font-medium transition-colors ${
+                className={`px-2.5 py-1 rounded-lg font-medium transition-colors cursor-pointer ${
                   statusFilter === item.id
                     ? 'bg-slate-200 text-slate-950 font-bold'
                     : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
@@ -106,7 +108,7 @@ export const MatchList: React.FC<MatchListProps> = ({ onOpenNewMatch }) => {
               <button
                 key={comp}
                 onClick={() => setCompetitionFilter(comp)}
-                className={`px-2.5 py-1 rounded-lg font-medium transition-colors ${
+                className={`px-2.5 py-1 rounded-lg font-medium transition-colors cursor-pointer ${
                   competitionFilter === comp
                     ? 'bg-slate-200 text-slate-950 font-bold'
                     : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
@@ -119,17 +121,37 @@ export const MatchList: React.FC<MatchListProps> = ({ onOpenNewMatch }) => {
         </div>
       </div>
 
-      {/* Main Grid: Matches list on left / Selected Match Sheet on Right (or full responsive view) */}
+      {/* Main Grid: Matches list on left / Selected Match Sheet on Right */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Matches Selector Column (4 cols on wide screens) */}
         <div className="lg:col-span-4 space-y-3">
-          <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider px-1">
-            Partidos Registrados ({filteredMatches.length})
-          </h3>
+          <div className="flex items-center justify-between px-1">
+            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+              Partidos {categoryFilter !== 'all' ? categoryFilter : 'Todas'} ({filteredMatches.length})
+            </h3>
+            {categoryFilter !== 'all' && (
+              <span className="text-[10px] text-amber-400 font-semibold">
+                Solo {categoryFilter}
+              </span>
+            )}
+          </div>
 
           {filteredMatches.length === 0 ? (
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 text-center text-xs text-slate-400">
-              No hay partidos con los filtros seleccionados.
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 text-center text-xs text-slate-400 space-y-2.5">
+              <FileSpreadsheet className="w-8 h-8 text-amber-400/80 mx-auto" />
+              <p className="font-bold text-white text-sm">
+                No hay partidos para {categoryFilter !== 'all' ? `la categoría ${categoryFilter}` : 'estos filtros'}
+              </p>
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                Cada técnico tiene su espacio exclusivo para no confundirse con otras categorías.
+              </p>
+              <button
+                onClick={onOpenNewMatch}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-400 text-slate-950 font-bold rounded-lg text-xs hover:bg-amber-300 transition-colors cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Crear Planilla {categoryFilter !== 'all' ? categoryFilter : ''}</span>
+              </button>
             </div>
           ) : (
             <div className="space-y-2.5">

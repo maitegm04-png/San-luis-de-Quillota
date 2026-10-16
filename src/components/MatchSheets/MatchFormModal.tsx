@@ -10,11 +10,14 @@ interface MatchFormModalProps {
 }
 
 export const MatchFormModal: React.FC<MatchFormModalProps> = ({ matchToEdit, onClose }) => {
-  const { addMatch, updateMatch, clubInfo, players } = useFootball();
+  const { addMatch, updateMatch, clubInfo, players, activeCategory, getCategoryStaff } = useFootball();
+
+  const defaultCategory = matchToEdit?.category || (activeCategory !== 'all' ? activeCategory : 'Sub 14');
+  const initialStaff = matchToEdit?.coachStaff || getCategoryStaff(defaultCategory);
 
   const [opponent, setOpponent] = useState<string>(matchToEdit?.opponent || '');
   const [competition, setCompetition] = useState<MatchCompetition>(matchToEdit?.competition || 'Liga');
-  const [category, setCategory] = useState<string>(matchToEdit?.category || 'Sub 16');
+  const [category, setCategory] = useState<string>(defaultCategory);
   const [matchDay, setMatchDay] = useState<string>(matchToEdit?.matchDay || 'Fecha 5');
   const [date, setDate] = useState<string>(matchToEdit?.date || new Date().toISOString().slice(0, 10));
   const [time, setTime] = useState<string>(matchToEdit?.time || '11:00');
@@ -28,13 +31,27 @@ export const MatchFormModal: React.FC<MatchFormModalProps> = ({ matchToEdit, onC
   const [tacticalNotesPre, setTacticalNotesPre] = useState<string>(matchToEdit?.tacticalNotesPre || '');
 
   // Coach staff - 7 Official roles: Entrenador, Ayudante Técnico, PF, PA, KIN, UT, COORD
-  const [coach, setCoach] = useState<string>(matchToEdit?.coachStaff.coach || clubInfo.coachStaff.coach);
-  const [assistantCoach, setAssistantCoach] = useState<string>(matchToEdit?.coachStaff.assistantCoach || clubInfo.coachStaff.assistantCoach);
-  const [physicalTrainer, setPhysicalTrainer] = useState<string>(matchToEdit?.coachStaff.physicalTrainer || clubInfo.coachStaff.physicalTrainer);
-  const [goalkeeperCoach, setGoalkeeperCoach] = useState<string>(matchToEdit?.coachStaff.goalkeeperCoach || clubInfo.coachStaff.goalkeeperCoach);
-  const [kinesiologist, setKinesiologist] = useState<string>(matchToEdit?.coachStaff.kinesiologist || clubInfo.coachStaff.kinesiologist);
-  const [kitManager, setKitManager] = useState<string>(matchToEdit?.coachStaff.kitManager || clubInfo.coachStaff.kitManager);
-  const [coordinator, setCoordinator] = useState<string>(matchToEdit?.coachStaff.coordinator || clubInfo.coachStaff.coordinator);
+  const [coach, setCoach] = useState<string>(initialStaff.coach);
+  const [assistantCoach, setAssistantCoach] = useState<string>(initialStaff.assistantCoach);
+  const [physicalTrainer, setPhysicalTrainer] = useState<string>(initialStaff.physicalTrainer);
+  const [goalkeeperCoach, setGoalkeeperCoach] = useState<string>(initialStaff.goalkeeperCoach);
+  const [kinesiologist, setKinesiologist] = useState<string>(initialStaff.kinesiologist);
+  const [kitManager, setKitManager] = useState<string>(initialStaff.kitManager);
+  const [coordinator, setCoordinator] = useState<string>(initialStaff.coordinator);
+
+  const handleCategoryChange = (newCat: string) => {
+    setCategory(newCat);
+    if (!matchToEdit) {
+      const staff = getCategoryStaff(newCat);
+      setCoach(staff.coach);
+      setAssistantCoach(staff.assistantCoach);
+      setPhysicalTrainer(staff.physicalTrainer);
+      setGoalkeeperCoach(staff.goalkeeperCoach);
+      setKinesiologist(staff.kinesiologist);
+      setKitManager(staff.kitManager);
+      setCoordinator(staff.coordinator);
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -177,7 +194,7 @@ export const MatchFormModal: React.FC<MatchFormModalProps> = ({ matchToEdit, onC
                 <label className="block font-semibold text-slate-300 mb-1">Categoría Oficial *</label>
                 <select
                   value={category}
-                  onChange={(e) => setCategory(e.target.value)}
+                  onChange={(e) => handleCategoryChange(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-amber-400 font-extrabold focus:outline-amber-500"
                 >
                   {CLUB_CATEGORIES.map((cat) => (
@@ -326,11 +343,29 @@ export const MatchFormModal: React.FC<MatchFormModalProps> = ({ matchToEdit, onC
 
           {/* Section 3: The 7 Coaching Staff Roles */}
           <div>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-xs font-bold text-amber-400 uppercase tracking-wider">
-                3. Cuerpo Técnico Oficial (Los 7 Cargos Reglamentarios)
-              </h3>
-              <span className="text-[10px] text-slate-400">Entrenador • Ayudante Técnico • PF • PA • KIN • UT • COORD</span>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+              <div>
+                <h3 className="text-xs font-bold text-amber-400 uppercase tracking-wider">
+                  3. Cuerpo Técnico Oficial ({category})
+                </h3>
+                <span className="text-[10px] text-slate-400">Entrenador • Ayudante Técnico • PF • PA • KIN • UT • COORD</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const staff = getCategoryStaff(category);
+                  setCoach(staff.coach);
+                  setAssistantCoach(staff.assistantCoach);
+                  setPhysicalTrainer(staff.physicalTrainer);
+                  setGoalkeeperCoach(staff.goalkeeperCoach);
+                  setKinesiologist(staff.kinesiologist);
+                  setKitManager(staff.kitManager);
+                  setCoordinator(staff.coordinator);
+                }}
+                className="text-[11px] font-bold text-amber-400 hover:text-amber-300 bg-amber-950/60 hover:bg-amber-900/60 border border-amber-800/80 rounded-lg px-2.5 py-1 transition-colors cursor-pointer self-start sm:self-auto"
+              >
+                ↻ Cargar Cuerpo Técnico de {category}
+              </button>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 bg-slate-950 p-4 rounded-xl border border-slate-800 mb-3">

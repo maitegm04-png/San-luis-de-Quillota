@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { ClubInfo, MatchEvent, MatchSheet, Player, Position, TacticalFormation } from '../types/football';
-import { FORMATIONS_SLOTS, INITIAL_CLUB_INFO, INITIAL_MATCHES, INITIAL_PLAYERS } from '../data/mockData';
+import { ClubInfo, CoachStaff, MatchEvent, MatchSheet, Player, Position, TacticalFormation } from '../types/football';
+import { FORMATIONS_SLOTS, INITIAL_CLUB_INFO, INITIAL_MATCHES, INITIAL_PLAYERS, INITIAL_STAFF_BY_CATEGORY } from '../data/mockData';
 
 interface FootballContextType {
   players: Player[];
@@ -9,6 +9,15 @@ interface FootballContextType {
   selectedMatchId: string | null;
   selectedMatch: MatchSheet | null;
   setSelectedMatchId: (id: string | null) => void;
+
+  // Active Category filter (Sub 11, Sub 12, Sub 13, Sub 14, Sub 15, Sub 16, Sub 18, Sub 20 or 'all')
+  activeCategory: string;
+  setActiveCategory: (cat: string) => void;
+
+  // Coaching staff per category
+  categoryStaff: Record<string, CoachStaff>;
+  getCategoryStaff: (cat?: string) => CoachStaff;
+  updateCategoryStaff: (cat: string, staff: Partial<CoachStaff>) => void;
   
   // Players actions
   addPlayer: (player: Omit<Player, 'id' | 'stats'>) => void;
@@ -47,6 +56,8 @@ const FootballContext = createContext<FootballContextType | undefined>(undefined
 const STORAGE_KEY_PLAYERS = 'san_luis_players_v2';
 const STORAGE_KEY_MATCHES = 'san_luis_matches_v2';
 const STORAGE_KEY_CLUB = 'san_luis_club_v2';
+const STORAGE_KEY_ACTIVE_CATEGORY = 'san_luis_active_category_v2';
+const STORAGE_KEY_STAFF_BY_CAT = 'san_luis_staff_by_cat_v2';
 
 export const FootballProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [players, setPlayers] = useState<Player[]>(() => {
@@ -76,6 +87,26 @@ export const FootballProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   });
 
+  // Active category filter: Sub 11 to Sub 20 or 'all'. Defaults to Sub 14 for specific team view
+  const [activeCategory, setActiveCategoryState] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_ACTIVE_CATEGORY);
+      return saved || 'Sub 14';
+    } catch {
+      return 'Sub 14';
+    }
+  });
+
+  // Technical staff customized per category
+  const [categoryStaff, setCategoryStaff] = useState<Record<string, CoachStaff>>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_STAFF_BY_CAT);
+      return saved ? JSON.parse(saved) : INITIAL_STAFF_BY_CATEGORY;
+    } catch {
+      return INITIAL_STAFF_BY_CATEGORY;
+    }
+  });
+
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(matches[0]?.id || null);
 
   // Sync to local storage
@@ -90,6 +121,38 @@ export const FootballProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_CLUB, JSON.stringify(clubInfo));
   }, [clubInfo]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY_ACTIVE_CATEGORY, activeCategory);
+  }, [activeCategory]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY_STAFF_BY_CAT, JSON.stringify(categoryStaff));
+  }, [categoryStaff]);
+
+  const setActiveCategory = (cat: string) => {
+    setActiveCategoryState(cat);
+    // If selecting a category, switch selectedMatch to one of that category if available
+    if (cat !== 'all') {
+      const matchInCat = matches.find((m) => m.category === cat);
+      if (matchInCat) {
+        setSelectedMatchId(matchInCat.id);
+      }
+    }
+  };
+
+  const getCategoryStaff = (cat?: string): CoachStaff => {
+    const key = cat && cat !== 'all' ? cat : activeCategory !== 'all' ? activeCategory : 'Sub 14';
+    return categoryStaff[key] || INITIAL_STAFF_BY_CATEGORY[key] || clubInfo.coachStaff;
+  };
+
+  const updateCategoryStaff = (cat: string, newStaff: Partial<CoachStaff>) => {
+    setCategoryStaff((prev) => {
+      const current = prev[cat] || INITIAL_STAFF_BY_CATEGORY[cat] || clubInfo.coachStaff;
+      const updated = { ...current, ...newStaff };
+      return { ...prev, [cat]: updated };
+    });
+  };
 
   const selectedMatch = matches.find((m) => m.id === selectedMatchId) || null;
 
@@ -490,10 +553,14 @@ export const FootballProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setPlayers(INITIAL_PLAYERS);
     setMatches(INITIAL_MATCHES);
     setClubInfo(INITIAL_CLUB_INFO);
+    setActiveCategoryState('Sub 14');
+    setCategoryStaff(INITIAL_STAFF_BY_CATEGORY);
     setSelectedMatchId(INITIAL_MATCHES[0].id);
     localStorage.removeItem(STORAGE_KEY_PLAYERS);
     localStorage.removeItem(STORAGE_KEY_MATCHES);
     localStorage.removeItem(STORAGE_KEY_CLUB);
+    localStorage.removeItem(STORAGE_KEY_ACTIVE_CATEGORY);
+    localStorage.removeItem(STORAGE_KEY_STAFF_BY_CAT);
   };
 
   const exportDatabaseJson = () => {
@@ -544,6 +611,11 @@ export const FootballProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         selectedMatchId,
         selectedMatch,
         setSelectedMatchId,
+        activeCategory,
+        setActiveCategory,
+        categoryStaff,
+        getCategoryStaff,
+        updateCategoryStaff,
         addPlayer,
         updatePlayer,
         deletePlayer,

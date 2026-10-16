@@ -6,7 +6,7 @@ import { PitchView } from '../PitchView';
 import { Trophy, Shield, Printer, RotateCcw, Award, CheckCircle2, X } from 'lucide-react';
 
 export const TacticalBoard: React.FC = () => {
-  const { players, clubInfo } = useFootball();
+  const { players, clubInfo, activeCategory, setActiveCategory, getCategoryStaff } = useFootball();
 
   const [formation, setFormation] = useState<TacticalFormation>('4-3-3');
   const [boardTitle, setBoardTitle] = useState('Plan Táctico Principal');
@@ -23,10 +23,18 @@ export const TacticalBoard: React.FC = () => {
     'Córners a favor: 2 al primer palo, 3 en zona de remate, 1 al rechace. Córners en contra: marcaje zonal mixto (5 zonales + 3 individuales).'
   );
 
+  // Filter players by active category
+  const categoryPlayers = activeCategory === 'all'
+    ? players
+    : players.filter((p) => p.category === activeCategory);
+
+  const activeStaff = getCategoryStaff(activeCategory);
+
   // Lineup state for tactical sandbox
   const [lineup, setLineup] = useState<LineupPlayer[]>(() => {
     const defaultSlots = FORMATIONS_SLOTS['4-3-3'];
-    const available = players.filter((p) => p.status === 'Disponible');
+    const initialPool = (activeCategory === 'all' ? players : players.filter((p) => p.category === activeCategory));
+    const available = initialPool.filter((p) => p.status === 'Disponible');
     return defaultSlots.map((s, i) => ({
       slotId: s.id,
       playerId: available[i]?.id || '',
@@ -34,8 +42,24 @@ export const TacticalBoard: React.FC = () => {
     })).filter((s) => s.playerId !== '');
   });
 
-  const [captainId, setCaptainId] = useState<string>(lineup[2]?.playerId || players[0]?.id || '');
+  const [captainId, setCaptainId] = useState<string>(lineup[2]?.playerId || categoryPlayers[0]?.id || '');
   const [activeSlotForAssign, setActiveSlotForAssign] = useState<string | null>(null);
+
+  // When active category changes, update the lineup with players from this category
+  React.useEffect(() => {
+    const pool = activeCategory === 'all' ? players : players.filter((p) => p.category === activeCategory);
+    const available = pool.filter((p) => p.status === 'Disponible');
+    const defaultSlots = FORMATIONS_SLOTS[formation];
+
+    const newLineup = defaultSlots.map((s, i) => ({
+      slotId: s.id,
+      playerId: available[i]?.id || '',
+      roleName: s.roleName,
+    })).filter((s) => s.playerId !== '');
+
+    setLineup(newLineup);
+    setCaptainId(newLineup[0]?.playerId || available[0]?.id || '');
+  }, [activeCategory, formation]);
 
   const handleFormationChange = (newFormation: TacticalFormation) => {
     setFormation(newFormation);
@@ -104,7 +128,7 @@ export const TacticalBoard: React.FC = () => {
             <button
               onClick={handlePrintBoard}
               type="button"
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-white bg-slate-800 hover:bg-slate-700 rounded-xl border border-slate-700 transition-colors"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-white bg-slate-800 hover:bg-slate-700 rounded-xl border border-slate-700 transition-colors cursor-pointer"
             >
               <Printer className="w-3.5 h-3.5" />
               <span>Imprimir Pizarra</span>
@@ -126,6 +150,45 @@ export const TacticalBoard: React.FC = () => {
             </select>
           </div>
         </div>
+
+        {/* Category Selector for Tactical Board */}
+        <div className="mt-4 pt-3 border-t border-slate-800/80 flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-amber-400 font-bold text-xs mr-1">Filtrar Pizarra por Categoría:</span>
+            {['Sub 11', 'Sub 12', 'Sub 13', 'Sub 14', 'Sub 15', 'Sub 16', 'Sub 18', 'Sub 20', 'all'].map((cat) => {
+              const isCurrent = activeCategory === cat;
+              const count = cat === 'all' ? players.length : players.filter((p) => p.category === cat).length;
+              return (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() => setActiveCategory(cat)}
+                  className={`px-2.5 py-1 text-xs rounded-lg font-bold transition-all cursor-pointer inline-flex items-center gap-1.5 ${
+                    isCurrent
+                      ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-950/40 ring-1 ring-amber-300'
+                      : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
+                  }`}
+                >
+                  <span>{cat === 'all' ? 'Ver Todas' : cat}</span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                    isCurrent ? 'bg-slate-950/20 text-slate-950' : 'bg-slate-800 text-slate-400'
+                  }`}>
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="text-xs text-slate-400 flex items-center gap-2">
+            <span className="text-slate-500">Plantilla:</span>
+            <span className="font-extrabold text-amber-300">
+              {categoryPlayers.length} jugadores en {activeCategory !== 'all' ? activeCategory : 'total'}
+            </span>
+            <span className="text-slate-600">•</span>
+            <span>DT: <strong className="text-slate-200">{activeStaff.coach}</strong></span>
+          </div>
+        </div>
       </div>
 
       {/* Main Tactical Grid */}
@@ -135,25 +198,37 @@ export const TacticalBoard: React.FC = () => {
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-bold text-white text-base flex items-center gap-2">
               <Shield className="w-4 h-4 text-emerald-400" />
-              Disposición Táctica en el Terreno
+              <span>Disposición Táctica - {activeCategory !== 'all' ? activeCategory : 'Plantilla General'}</span>
             </h3>
             <span className="text-xs text-slate-400">
               {lineup.length} / 11 Jugadores
             </span>
           </div>
 
-          <PitchView
-            formation={formation}
-            startingEleven={lineup}
-            players={players}
-            captainId={captainId}
-            onSlotClick={(slotId) => setActiveSlotForAssign(slotId)}
-            onRemovePlayer={handleRemoveFromSlot}
-            isEditable={true}
-          />
+          {categoryPlayers.length === 0 ? (
+            <div className="bg-slate-950 border border-slate-800 rounded-xl p-8 text-center text-xs text-slate-400 space-y-2">
+              <Shield className="w-8 h-8 text-amber-400/60 mx-auto" />
+              <p className="font-bold text-white text-sm">
+                No hay jugadores inscritos en {activeCategory}
+              </p>
+              <p className="text-slate-400">
+                Selecciona otra categoría con jugadores o inscribe canteranos en la base de datos para trabajar en la pizarra.
+              </p>
+            </div>
+          ) : (
+            <PitchView
+              formation={formation}
+              startingEleven={lineup}
+              players={categoryPlayers.length > 0 ? categoryPlayers : players}
+              captainId={captainId}
+              onSlotClick={(slotId) => setActiveSlotForAssign(slotId)}
+              onRemovePlayer={handleRemoveFromSlot}
+              isEditable={true}
+            />
+          )}
 
           <p className="text-[11px] text-slate-500 text-center mt-3 italic">
-            * Pulsa sobre cualquier posición vacía para colocar a un jugador de la plantilla.
+            * Pulsa sobre cualquier posición vacía para colocar a un jugador de la plantilla {activeCategory !== 'all' ? activeCategory : ''}.
           </p>
         </div>
 
@@ -163,7 +238,7 @@ export const TacticalBoard: React.FC = () => {
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl">
             <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
               <Award className="w-3.5 h-3.5 text-amber-400" />
-              Liderazgo en el Campo
+              Liderazgo en el Campo ({activeCategory !== 'all' ? activeCategory : 'General'})
             </h4>
             <div className="flex items-center justify-between gap-2 text-xs">
               <span className="text-slate-300 font-semibold">Capitán Designado:</span>
@@ -172,7 +247,7 @@ export const TacticalBoard: React.FC = () => {
                 onChange={(e) => setCaptainId(e.target.value)}
                 className="bg-slate-950 border border-slate-800 text-white font-bold rounded-lg px-2.5 py-1.5 text-xs focus:outline-none"
               >
-                {players.map((p) => (
+                {(categoryPlayers.length > 0 ? categoryPlayers : players).map((p) => (
                   <option key={p.id} value={p.id}>
                     #{p.squadNumber} {p.nickname || `${p.firstName} ${p.lastName}`} ({p.primaryPosition})
                   </option>
@@ -244,7 +319,12 @@ export const TacticalBoard: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/80 backdrop-blur-xs">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-5 shadow-2xl">
             <div className="flex items-center justify-between pb-3 border-b border-slate-800 mb-3">
-              <h3 className="font-bold text-white text-sm">Selecciona Jugador para la Pizarra</h3>
+              <div>
+                <h3 className="font-bold text-white text-sm">Selecciona Jugador para la Pizarra</h3>
+                <p className="text-[10px] text-amber-400">
+                  {activeCategory !== 'all' ? `Mostrando jugadores de ${activeCategory}` : 'Mostrando todos los jugadores'}
+                </p>
+              </div>
               <button
                 type="button"
                 onClick={() => setActiveSlotForAssign(null)}
@@ -255,7 +335,7 @@ export const TacticalBoard: React.FC = () => {
             </div>
 
             <div className="space-y-1.5 max-h-72 overflow-y-auto">
-              {players.map((p) => {
+              {(categoryPlayers.length > 0 ? categoryPlayers : players).map((p) => {
                 const isSelected = lineup.some((l) => l.playerId === p.id);
                 return (
                   <button

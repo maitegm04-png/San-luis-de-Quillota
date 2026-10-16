@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { FootballProvider, useFootball } from './context/FootballContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import { Header, ActiveTab } from './components/Header';
 import { PlayerList } from './components/PlayerDatabase/PlayerList';
 import { PlayerFormModal } from './components/PlayerDatabase/PlayerFormModal';
@@ -8,15 +9,34 @@ import { MatchFormModal } from './components/MatchSheets/MatchFormModal';
 import { TacticalBoard } from './components/Tactics/TacticalBoard';
 import { ClubStats } from './components/StatsDashboard/ClubStats';
 import { ClubSettingsModal } from './components/ClubSettingsModal';
+import { LoginScreen } from './components/Auth/LoginScreen';
+import { UserManagementModal } from './components/Auth/UserManagementModal';
 import { Shield } from 'lucide-react';
 
 function FootballApp() {
-  const { clubInfo, players, matches } = useFootball();
+  const { currentUser, isAuthenticated } = useAuth();
+  const { clubInfo, players, matches, setActiveCategory, activeCategory } = useFootball();
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('matches');
   const [isNewMatchOpen, setIsNewMatchOpen] = useState(false);
   const [isNewPlayerOpen, setIsNewPlayerOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isUsersOpen, setIsUsersOpen] = useState(false);
+
+  // If user is not authenticated, show the login/register screen
+  if (!isAuthenticated) {
+    return (
+      <LoginScreen
+        onLoginSuccess={(userCategory) => {
+          if (userCategory && userCategory !== 'Todas') {
+            setActiveCategory(userCategory);
+          } else {
+            setActiveCategory('all');
+          }
+        }}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-emerald-500 selection:text-white">
@@ -27,6 +47,7 @@ function FootballApp() {
         onOpenNewMatch={() => setIsNewMatchOpen(true)}
         onOpenNewPlayer={() => setIsNewPlayerOpen(true)}
         onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenUsers={() => setIsUsersOpen(true)}
       />
 
       {/* Main Workspace Area */}
@@ -60,12 +81,12 @@ function FootballApp() {
             </span>
           </div>
 
-          <div className="flex items-center gap-4 text-slate-400">
+          <div className="flex items-center gap-4 text-slate-400 flex-wrap">
             <span>{players.length} Futbolistas en plantilla</span>
             <span>•</span>
             <span>{matches.length} Planillas registradas</span>
             <span>•</span>
-            <span>DT: {clubInfo.coachStaff?.coach || 'Cuerpo Técnico'}</span>
+            <span>Sesión: <strong className="text-amber-400">{currentUser?.name}</strong> ({currentUser?.category})</span>
           </div>
         </div>
       </footer>
@@ -80,7 +101,14 @@ function FootballApp() {
       )}
 
       {isSettingsOpen && (
-        <ClubSettingsModal onClose={() => setIsSettingsOpen(false)} />
+        <ClubSettingsModal 
+          onClose={() => setIsSettingsOpen(false)} 
+          onOpenUsers={() => setIsUsersOpen(true)}
+        />
+      )}
+
+      {isUsersOpen && (
+        <UserManagementModal onClose={() => setIsUsersOpen(false)} />
       )}
     </div>
   );
@@ -88,8 +116,10 @@ function FootballApp() {
 
 export default function App() {
   return (
-    <FootballProvider>
-      <FootballApp />
-    </FootballProvider>
+    <AuthProvider>
+      <FootballProvider>
+        <FootballApp />
+      </FootballProvider>
+    </AuthProvider>
   );
 }
