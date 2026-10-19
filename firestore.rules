@@ -36,6 +36,26 @@ service cloud.firestore {
       allow read, write: if isValidId(planId);
     }
 
+    // Medical injuries collection
+    match /injuries/{injuryId} {
+      allow read, write: if isValidId(injuryId);
+    }
+
+    // Citations / Convocatorias collection
+    match /citations/{citationId} {
+      allow read, write: if isValidId(citationId);
+    }
+
+    // Daily wellness check-ins
+    match /checkins/{checkinId} {
+      allow read, write: if isValidId(checkinId);
+    }
+
+    // Daily post-session check-outs
+    match /checkouts/{checkoutId} {
+      allow read, write: if isValidId(checkoutId);
+    }
+
     // Connection testing
     match /test/{docId} {
       allow read, write: if isValidId(docId);

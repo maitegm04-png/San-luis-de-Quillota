@@ -3,7 +3,8 @@ import { MatchSheet, Player } from '../../types/football';
 import { useFootball } from '../../context/FootballContext';
 import { Printer, Shield, CheckCircle2, Clock, Settings2, Download, FileDown, Trophy, Star, Activity, Flame } from 'lucide-react';
 import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
+import html2canvas from 'html2canvas-pro';
+import { sanitizeClonedDocColors } from '../../services/pdfColorSanitizer';
 
 interface PrintableMatchSheetProps {
   match: MatchSheet;
@@ -12,11 +13,12 @@ interface PrintableMatchSheetProps {
 export const PrintableMatchSheet: React.FC<PrintableMatchSheetProps> = ({ match }) => {
   const { clubInfo, players } = useFootball();
 
-  // Customization options: By default, DNI, Fecha, Firmas, and Estadísticas Colectivas are removed as requested
+  // Customization options: By default, DNI, Fecha, Firmas are optional, while Physical Area is enabled
   const [includeDni, setIncludeDni] = useState<boolean>(false);
   const [includeDate, setIncludeDate] = useState<boolean>(false);
   const [includeSignatures, setIncludeSignatures] = useState<boolean>(false);
-  const [includeCollectiveStats, setIncludeCollectiveStats] = useState<boolean>(false);
+  const [includePhysicalReport, setIncludePhysicalReport] = useState<boolean>(true);
+  const [includeGpsReport, setIncludeGpsReport] = useState<boolean>(match.category === 'Sub 20');
   const [isExporting, setIsExporting] = useState<boolean>(false);
 
   const handlePrint = () => {
@@ -34,6 +36,9 @@ export const PrintableMatchSheet: React.FC<PrintableMatchSheetProps> = ({ match 
         useCORS: true,
         logging: false,
         backgroundColor: '#ffffff',
+        onclone: (clonedDoc) => {
+          sanitizeClonedDocColors(clonedDoc);
+        }
       });
 
       const imgData = canvas.toDataURL('image/png');
@@ -93,6 +98,27 @@ export const PrintableMatchSheet: React.FC<PrintableMatchSheetProps> = ({ match 
   const goalEvents = match.events.filter((e) => e.type === 'goal' || e.type === 'penalty_scored' || e.type === 'goal_conceded');
   const cardEvents = match.events.filter((e) => e.type === 'yellow_card' || e.type === 'red_card');
   const subEvents = match.events.filter((e) => e.type === 'sub_in_out');
+  const injuryEvents = match.events.filter((e) => e.type === 'injury');
+
+  const allInjuries = [
+    ...(match.injuryIncidents || []),
+    ...injuryEvents
+      .filter((e) => !match.injuryIncidents?.some((i) => i.playerId === e.playerId && i.minute === e.minute))
+      .map((e) => {
+        const p = getPlayer(e.playerId);
+        return {
+          id: e.id,
+          playerId: e.playerId || '',
+          playerName: p ? (p.nickname || `${p.firstName} ${p.lastName}`) : 'Futbolista',
+          playerSquadNumber: p?.squadNumber,
+          minute: e.minute,
+          description: e.injuryIncident?.description || e.detail || 'Salió lesionado del partido',
+          injuryType: e.injuryIncident?.injuryType || 'Lesión en Partido',
+          bodyZone: e.injuryIncident?.bodyZone || 'Por evaluar',
+          severity: e.injuryIncident?.severity || 'Moderada',
+        };
+      })
+  ].sort((a, b) => a.minute - b.minute);
 
   const mvpPlayer = getPlayer(match.mvpPlayerId);
 
@@ -173,12 +199,24 @@ export const PrintableMatchSheet: React.FC<PrintableMatchSheetProps> = ({ match 
           <label className="flex items-center gap-1.5 cursor-pointer hover:text-white transition-colors">
             <input
               type="checkbox"
-              checked={includeCollectiveStats}
-              onChange={(e) => setIncludeCollectiveStats(e.target.checked)}
+              checked={includePhysicalReport}
+              onChange={(e) => setIncludePhysicalReport(e.target.checked)}
               className="accent-amber-400 rounded cursor-pointer"
             />
-            <span>Incluir Estadísticas Colectivas</span>
+            <span>Incluir Área Física (P.F.)</span>
           </label>
+
+          {match.category === 'Sub 20' && (
+            <label className="flex items-center gap-1.5 cursor-pointer hover:text-white transition-colors">
+              <input
+                type="checkbox"
+                checked={includeGpsReport}
+                onChange={(e) => setIncludeGpsReport(e.target.checked)}
+                className="accent-cyan-400 rounded cursor-pointer"
+              />
+              <span>Incluir Reporte GPS (Sub-20)</span>
+            </label>
+          )}
         </div>
       </div>
 
@@ -550,65 +588,255 @@ export const PrintableMatchSheet: React.FC<PrintableMatchSheetProps> = ({ match 
           </div>
         </div>
 
-        {/* SECTION: ESTADÍSTICAS COLECTIVAS (Opcional según selector de impresión) */}
-        {includeCollectiveStats && (
-          <div className="mb-5">
-            <h2 className="text-xs font-black uppercase tracking-wider bg-black text-white px-2 py-0.5 rounded inline-block mb-1.5">
-              Estadísticas Colectivas del Partido
+        {/* SECTION: INCIDENCIAS MÉDICAS Y JUGADORES LESIONADOS EN EL PARTIDO */}
+        <div className="mb-5">
+          <div className="flex items-center justify-between mb-1.5">
+            <h2 className="text-xs font-black uppercase tracking-wider bg-black text-white px-2 py-0.5 rounded inline-block">
+              Incidencias Médicas y Futbolistas Lesionados en el Encuentro
             </h2>
-            <div className="border border-slate-300 rounded overflow-hidden">
-              <table className="w-full text-center text-xs border-collapse">
+            <span className="text-[10px] font-bold text-slate-700">
+              {allInjuries.length === 0 ? 'Sin lesionados' : `${allInjuries.length} reporte(s) médico(s)`}
+            </span>
+          </div>
+
+          <div className="border border-slate-300 rounded overflow-hidden">
+            {allInjuries.length === 0 ? (
+              <p className="text-[11px] text-slate-600 italic p-3 bg-white">
+                Sin incidencias médicas ni futbolistas lesionados durante el tiempo reglamentario.
+              </p>
+            ) : (
+              <table className="w-full text-xs text-left border-collapse">
                 <thead className="bg-slate-200 text-slate-800 uppercase text-[10px] font-bold">
                   <tr>
-                    <th className="p-1.5 border border-slate-300 w-1/3 text-left pl-3">{match.isHome ? clubInfo.name : match.opponent} (Local)</th>
-                    <th className="p-1.5 border border-slate-300 w-1/3">Métrica Colectiva</th>
-                    <th className="p-1.5 border border-slate-300 w-1/3 text-right pr-3">{match.isHome ? match.opponent : clubInfo.name} (Visita)</th>
+                    <th className="p-1.5 border border-slate-300 w-16 text-center">Minuto</th>
+                    <th className="p-1.5 border border-slate-300 w-48">Futbolista Afectado</th>
+                    <th className="p-1.5 border border-slate-300">¿Qué le pasó? (Mecanismo del Incidente / Trauma)</th>
+                    <th className="p-1.5 border border-slate-300 w-44">Diagnóstico / Zona Afectada</th>
+                    <th className="p-1.5 border border-slate-300 w-28 text-center">Gravedad</th>
                   </tr>
                 </thead>
-                <tbody className="text-xs font-semibold">
-                  <tr className="bg-white">
-                    <td className="p-1.5 border border-slate-300 font-black text-sm">{match.homeScore}</td>
-                    <td className="p-1.5 border border-slate-300 text-slate-700">Goles Marcados</td>
-                    <td className="p-1.5 border border-slate-300 font-black text-sm">{match.awayScore}</td>
+                <tbody className="text-[11px]">
+                  {allInjuries.map((inj, idx) => {
+                    const p = getPlayer(inj.playerId);
+                    return (
+                      <tr key={inj.id || idx} className="border-b border-slate-200 bg-white">
+                        <td className="p-1.5 border border-slate-300 font-mono font-black text-center text-rose-700 bg-rose-50/50">
+                          {inj.minute}'
+                        </td>
+                        <td className="p-1.5 border border-slate-300 font-bold text-slate-900">
+                          #{inj.playerSquadNumber || p?.squadNumber} {inj.playerName}
+                          {p?.primaryPosition && (
+                            <span className="text-[9px] text-slate-500 font-normal ml-1">({p.primaryPosition})</span>
+                          )}
+                        </td>
+                        <td className="p-1.5 border border-slate-300 text-slate-800 font-medium">
+                          {inj.description}
+                        </td>
+                        <td className="p-1.5 border border-slate-300 text-slate-700">
+                          <strong className="block text-slate-900">{inj.injuryType || 'Lesión en partido'}</strong>
+                          <span className="text-[10px] text-slate-600">{inj.bodyZone || 'En evaluación'}</span>
+                        </td>
+                        <td className="p-1.5 border border-slate-300 text-center font-bold text-rose-800">
+                          {inj.severity || 'Moderada'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+
+        {/* SECTION: REPORTE ÁREA FÍSICA - FÚTBOL FORMATIVO (Sub-14 a Sub-20) */}
+        {includePhysicalReport && (
+          <div className="mb-5 page-break-inside-avoid">
+            <div className="flex items-center justify-between mb-1.5">
+              <h2 className="text-xs font-black uppercase tracking-wider bg-black text-white px-2 py-0.5 rounded inline-block">
+                Reporte Área Física - Fútbol Formativo ({match.category})
+              </h2>
+              <span className="text-[10px] text-slate-600 font-bold uppercase">
+                PF Responsable: {match.physicalReport?.recordedBy || match.coachStaff.physicalTrainer || clubInfo.coachStaff.physicalTrainer || 'Área Física'}
+              </span>
+            </div>
+
+            {/* Context bar */}
+            <div className="grid grid-cols-4 gap-2 p-2 bg-slate-100 border border-slate-300 rounded text-[10px] mb-2 font-semibold">
+              <div>
+                <span className="text-slate-500 block uppercase text-[9px]">Partido</span>
+                <span className="text-black font-black">{match.isHome ? clubInfo.shortName : match.opponent} vs {match.isHome ? match.opponent : clubInfo.shortName}</span>
+              </div>
+              <div>
+                <span className="text-slate-500 block uppercase text-[9px]">Superficie / Campo</span>
+                <span className="text-black font-bold">{match.physicalReport?.fieldCondition || (match.pitchType === 'Césped Artificial' ? 'Sintético' : 'Césped')}</span>
+              </div>
+              <div>
+                <span className="text-slate-500 block uppercase text-[9px]">Sistema Táctico</span>
+                <span className="text-black font-bold">{match.physicalReport?.tacticalSystem || match.formation || '1-4-3-3'}</span>
+              </div>
+              <div>
+                <span className="text-slate-500 block uppercase text-[9px]">Lugar / Recinto</span>
+                <span className="text-black font-bold">{match.physicalReport?.venueLocation || match.venue || 'Complejo SLQ'}</span>
+              </div>
+            </div>
+
+            {/* Physical Entries Table */}
+            <div className="border border-slate-300 rounded overflow-hidden">
+              <table className="w-full text-center text-[10px] border-collapse">
+                <thead className="bg-slate-200 text-slate-800 uppercase text-[9px] font-bold">
+                  <tr>
+                    <th className="p-1 border border-slate-300 w-8">Nº</th>
+                    <th className="p-1 border border-slate-300 text-left pl-2">Jugador</th>
+                    <th className="p-1 border border-slate-300 w-24">Rol</th>
+                    <th className="p-1 border border-slate-300 w-16">Minutos</th>
+                    <th className="p-1 border border-slate-300 w-20">PSE (0-10)</th>
+                    <th className="p-1 border border-slate-300 w-28">Estado Físico</th>
                   </tr>
-                  <tr className="bg-slate-50">
-                    <td className="p-1.5 border border-slate-300 font-bold">{match.matchStats.possessionHome}%</td>
-                    <td className="p-1.5 border border-slate-300 text-slate-700">Posesión Estimada</td>
-                    <td className="p-1.5 border border-slate-300 font-bold">{100 - match.matchStats.possessionHome}%</td>
-                  </tr>
-                  <tr className="bg-white">
-                    <td className="p-1.5 border border-slate-300 font-bold">{match.matchStats.shotsHome}</td>
-                    <td className="p-1.5 border border-slate-300 text-slate-700">Tiros Totales</td>
-                    <td className="p-1.5 border border-slate-300 font-bold">{match.matchStats.shotsAway}</td>
-                  </tr>
-                  <tr className="bg-slate-50">
-                    <td className="p-1.5 border border-slate-300 font-bold">{match.matchStats.shotsOnTargetHome}</td>
-                    <td className="p-1.5 border border-slate-300 text-slate-700">Tiros a Puerta</td>
-                    <td className="p-1.5 border border-slate-300 font-bold">{match.matchStats.shotsOnTargetAway}</td>
-                  </tr>
-                  <tr className="bg-white">
-                    <td className="p-1.5 border border-slate-300 font-bold">{match.matchStats.cornersHome}</td>
-                    <td className="p-1.5 border border-slate-300 text-slate-700">Córners / Tiros de Esquina</td>
-                    <td className="p-1.5 border border-slate-300 font-bold">{match.matchStats.cornersAway}</td>
-                  </tr>
-                  <tr className="bg-slate-50">
-                    <td className="p-1.5 border border-slate-300 font-bold">{match.matchStats.foulsHome}</td>
-                    <td className="p-1.5 border border-slate-300 text-slate-700">Faltas Cometidas</td>
-                    <td className="p-1.5 border border-slate-300 font-bold">{match.matchStats.foulsAway}</td>
-                  </tr>
-                  <tr className="bg-white">
-                    <td className="p-1.5 border border-slate-300 font-bold">{match.matchStats.yellowCardsHome ?? 0}🟨 / {match.matchStats.redCardsHome ?? 0}🟥</td>
-                    <td className="p-1.5 border border-slate-300 text-slate-700">Tarjetas Colectivas</td>
-                    <td className="p-1.5 border border-slate-300 font-bold">{match.matchStats.yellowCardsAway ?? 0}🟨 / {match.matchStats.redCardsAway ?? 0}🟥</td>
-                  </tr>
-                  <tr className="bg-slate-50">
-                    <td className="p-1.5 border border-slate-300 font-bold">{match.matchStats.offsidesHome ?? 0}</td>
-                    <td className="p-1.5 border border-slate-300 text-slate-700">Fueras de Juego</td>
-                    <td className="p-1.5 border border-slate-300 font-bold">{match.matchStats.offsidesAway ?? 0}</td>
-                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {((match.physicalReport?.players && match.physicalReport.players.length > 0)
+                    ? match.physicalReport.players
+                    : [
+                        ...starters.map((s, idx) => ({
+                          number: idx + 1,
+                          firstName: s.player?.firstName || 'JUGADOR',
+                          lastName: s.player?.lastName || '',
+                          role: 'TITULAR' as const,
+                          minutes: match.playerRatings?.[s.slot.playerId]?.minutes ?? 90,
+                          pse: 7,
+                          status: '-' as const,
+                        })),
+                        ...substitutes.map((sub, idx) => ({
+                          number: starters.length + idx + 1,
+                          firstName: sub.firstName,
+                          lastName: sub.lastName,
+                          role: 'SUPLENTE' as const,
+                          minutes: match.playerRatings?.[sub.id]?.minutes ?? 0,
+                          pse: 0,
+                          status: '-' as const,
+                        }))
+                      ]
+                  ).map((entry, idx) => (
+                    <tr key={idx} className={entry.role === 'TITULAR' ? 'bg-white' : 'bg-slate-50'}>
+                      <td className="p-1 border border-slate-300 font-bold">{entry.number || idx + 1}</td>
+                      <td className="p-1 border border-slate-300 text-left pl-2 font-bold uppercase text-slate-900">
+                        {entry.firstName} {entry.lastName}
+                      </td>
+                      <td className="p-1 border border-slate-300 font-semibold text-[9px]">
+                        <span className={entry.role === 'TITULAR' ? 'text-black font-black' : 'text-slate-600'}>
+                          {entry.role}
+                        </span>
+                      </td>
+                      <td className="p-1 border border-slate-300 font-mono font-bold">{entry.minutes}'</td>
+                      <td className="p-1 border border-slate-300 font-black">
+                        {entry.pse > 0 ? (
+                          <span className={`px-1.5 py-0.5 rounded text-white ${
+                            entry.pse >= 8 ? 'bg-red-600' : entry.pse >= 6 ? 'bg-amber-500 text-black' : 'bg-emerald-600'
+                          }`}>
+                            {entry.pse} / 10
+                          </span>
+                        ) : (
+                          <span className="text-slate-400">-</span>
+                        )}
+                      </td>
+                      <td className="p-1 border border-slate-300 font-bold">
+                        <span className={entry.status === 'Sobrecarga' || entry.status === 'Molestia' ? 'text-rose-700 font-black' : 'text-slate-700'}>
+                          {entry.status || '-'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
+
+            {/* Averages & Notes summary bar */}
+            <div className="mt-1.5 grid grid-cols-1 sm:grid-cols-3 gap-2 text-[10px]">
+              <div className="p-1.5 bg-slate-50 border border-slate-300 rounded flex justify-between items-center">
+                <span className="font-semibold text-slate-600">Promedio PSE Titulares:</span>
+                <span className="font-black text-black text-xs font-mono">
+                  {match.physicalReport?.averagePseTitulares ? `${match.physicalReport.averagePseTitulares} / 10` : '7.0 / 10'}
+                </span>
+              </div>
+              <div className="p-1.5 bg-slate-50 border border-slate-300 rounded flex justify-between items-center">
+                <span className="font-semibold text-slate-600">Promedio PSE Suplentes:</span>
+                <span className="font-black text-black text-xs font-mono">
+                  {match.physicalReport?.averagePseSuplentes ? `${match.physicalReport.averagePseSuplentes} / 10` : '5.5 / 10'}
+                </span>
+              </div>
+              <div className="p-1.5 bg-slate-50 border border-slate-300 rounded flex justify-between items-center">
+                <span className="font-semibold text-slate-600">Promedio PSE Total:</span>
+                <span className="font-black text-emerald-700 text-xs font-mono">
+                  {match.physicalReport?.averagePseTotal ? `${match.physicalReport.averagePseTotal} / 10` : '6.5 / 10'}
+                </span>
+              </div>
+            </div>
+
+            {match.physicalReport?.notes && (
+              <div className="mt-1.5 p-2 bg-amber-50 border border-amber-300 rounded text-[10px]">
+                <strong className="text-amber-900 block font-bold">Observaciones del Preparador Físico:</strong>
+                <p className="text-slate-800 italic mt-0.5">{match.physicalReport.notes}</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* SECTION: INFORME GPS POST PARTIDO - EXCLUSIVO SUB-20 */}
+        {includeGpsReport && (match.gpsReport || match.category === 'Sub 20') && (
+          <div className="mb-5 page-break-inside-avoid">
+            <div className="flex items-center justify-between mb-1.5">
+              <h2 className="text-xs font-black uppercase tracking-wider bg-black text-white px-2 py-0.5 rounded inline-block">
+                Informe GPS Post Partido - Sub 20 (San Luis de Quillota)
+              </h2>
+              <span className="text-[10px] text-cyan-800 font-bold uppercase">
+                Métricas Catapult / WIMU GPS & PSE
+              </span>
+            </div>
+
+            {/* GPS Table */}
+            <div className="border border-slate-300 rounded overflow-hidden">
+              <table className="w-full text-center text-[9px] border-collapse">
+                <thead className="bg-slate-200 text-slate-800 uppercase font-bold text-[8.5px]">
+                  <tr>
+                    <th className="p-1 border border-slate-300 text-left pl-2">Jugador</th>
+                    <th className="p-1 border border-slate-300 w-12">Min</th>
+                    <th className="p-1 border border-slate-300 w-16">Dist. Total (m)</th>
+                    <th className="p-1 border border-slate-300 w-14">m / Min</th>
+                    <th className="p-1 border border-slate-300 w-16">HSR &gt;19.8km/h</th>
+                    <th className="p-1 border border-slate-300 w-14">Sprint Dist.</th>
+                    <th className="p-1 border border-slate-300 w-12">Sprints</th>
+                    <th className="p-1 border border-slate-300 w-16">V. Máx (km/h)</th>
+                    <th className="p-1 border border-slate-300 w-12">PSE</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {(match.gpsReport?.players || []).map((p, idx) => (
+                    <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+                      <td className="p-1 border border-slate-300 text-left pl-2 font-bold uppercase text-slate-900">{p.playerName}</td>
+                      <td className="p-1 border border-slate-300 font-mono">{p.minutes}'</td>
+                      <td className="p-1 border border-slate-300 font-mono font-bold">{p.totalDistanceMeters.toLocaleString()} m</td>
+                      <td className="p-1 border border-slate-300 font-mono">{p.distancePerMinute}</td>
+                      <td className="p-1 border border-slate-300 font-mono">{p.highSpeedDistance} m</td>
+                      <td className="p-1 border border-slate-300 font-mono">{p.sprintDistance} m</td>
+                      <td className="p-1 border border-slate-300 font-mono font-bold">{p.sprintsCount}</td>
+                      <td className="p-1 border border-slate-300 font-mono font-bold text-cyan-900">{p.maxSpeed}</td>
+                      <td className="p-1 border border-slate-300 font-bold">{p.pse}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* GPS Team Averages */}
+            {match.gpsReport?.averages && (
+              <div className="mt-1.5 p-2 bg-slate-100 border border-slate-300 rounded text-[9px] flex flex-wrap justify-between gap-2 font-semibold">
+                <div><span className="text-slate-500">Promedio Dist:</span> <strong className="text-black">{match.gpsReport.averages.avgTotalDistance} m</strong></div>
+                <div><span className="text-slate-500">Promedio m/min:</span> <strong className="text-black">{match.gpsReport.averages.avgDistancePerMin} m/min</strong></div>
+                <div><span className="text-slate-500">Promedio HSR:</span> <strong className="text-black">{match.gpsReport.averages.avgHighSpeedDistance} m</strong></div>
+                <div><span className="text-slate-500">Promedio Sprints:</span> <strong className="text-black">{match.gpsReport.averages.avgSprints}</strong></div>
+                <div><span className="text-slate-500">Velocidad Máx. Promedio:</span> <strong className="text-black">{match.gpsReport.averages.avgMaxSpeed} km/h</strong></div>
+              </div>
+            )}
           </div>
         )}
 

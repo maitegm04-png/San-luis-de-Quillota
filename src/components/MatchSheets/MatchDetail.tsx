@@ -4,6 +4,8 @@ import { useFootball } from '../../context/FootballContext';
 import { PitchView } from '../PitchView';
 import { PrintableMatchSheet } from './PrintableMatchSheet';
 import { MatchFormModal } from './MatchFormModal';
+import { MatchPhysicalReportTab } from '../PhysicalArea/MatchPhysicalReportTab';
+import { Sub20GpsReportTab } from '../PhysicalArea/Sub20GpsReportTab';
 import { 
   Trophy, 
   Users, 
@@ -27,7 +29,9 @@ import {
   FileDown,
   Flame,
   Activity,
-  Save
+  Save,
+  Dumbbell,
+  Zap
 } from 'lucide-react';
 import { POSITION_LABELS } from '../../data/mockData';
 
@@ -36,7 +40,7 @@ interface MatchDetailProps {
   onBackToList?: () => void;
 }
 
-type DetailTab = 'lineup' | 'manual_entry' | 'collective_stats' | 'sheet' | 'live' | 'ratings';
+type DetailTab = 'lineup' | 'manual_entry' | 'physical_area' | 'gps_sub20' | 'sheet' | 'live' | 'ratings';
 
 export const MatchDetail: React.FC<MatchDetailProps> = ({ match, onBackToList }) => {
   const { 
@@ -53,7 +57,9 @@ export const MatchDetail: React.FC<MatchDetailProps> = ({ match, onBackToList })
     removeMatchEvent, 
     updatePlayerRating, 
     updateMatchScore, 
-    finishMatch 
+    finishMatch,
+    recordMatchInjury,
+    removeMatchInjury
   } = useFootball();
 
   const [activeTab, setActiveTab] = useState<DetailTab>('manual_entry');
@@ -69,9 +75,7 @@ export const MatchDetail: React.FC<MatchDetailProps> = ({ match, onBackToList })
   const [staffCOORD, setStaffCOORD] = useState<string>(match.coachStaff?.coordinator || '');
   const [staffSaveMsg, setStaffSaveMsg] = useState<string | null>(null);
 
-  // Extract Collective Stats modal state
-  const [isExtractModalOpen, setIsExtractModalOpen] = useState(false);
-  const [copySuccess, setCopySuccess] = useState(false);
+  // Coaching Staff local state for this specific match
 
   // Sync staff when match changes
   React.useEffect(() => {
@@ -125,6 +129,23 @@ export const MatchDetail: React.FC<MatchDetailProps> = ({ match, onBackToList })
   const [mEventRivalName, setMEventRivalName] = useState<string>('');
   const [mEventDetail, setMEventDetail] = useState<string>('');
 
+  // Injury event state for match sheet
+  const [mEventInjuryDesc, setMEventInjuryDesc] = useState<string>('');
+  const [mEventInjuryType, setMEventInjuryType] = useState<string>('Traumatismo / Dolor en Partido');
+  const [mEventBodyZone, setMEventBodyZone] = useState<string>('Tobillo derecho');
+  const [mEventSeverity, setMEventSeverity] = useState<'Leve' | 'Moderada' | 'Grave' | 'Muy Grave'>('Moderada');
+  const [mEventSyncMedical, setMEventSyncMedical] = useState<boolean>(true);
+
+  // Quick report injury modal
+  const [isQuickInjuryModalOpen, setIsQuickInjuryModalOpen] = useState(false);
+  const [quickInjuryPlayerId, setQuickInjuryPlayerId] = useState<string>('');
+  const [quickInjuryMinute, setQuickInjuryMinute] = useState<number>(45);
+  const [quickInjuryDesc, setQuickInjuryDesc] = useState<string>('');
+  const [quickInjuryType, setQuickInjuryType] = useState<string>('Traumatismo en Partido');
+  const [quickInjuryZone, setQuickInjuryZone] = useState<string>('Rodilla');
+  const [quickInjurySeverity, setQuickInjurySeverity] = useState<'Leve' | 'Moderada' | 'Grave' | 'Muy Grave'>('Moderada');
+  const [quickInjurySyncMedical, setQuickInjurySyncMedical] = useState<boolean>(true);
+
   // Live Event modal state
   const [isEventModalOpen, setIsEventModalOpen] = useState(false);
   const [liveEventType, setLiveEventType] = useState<MatchEventType>('goal');
@@ -171,91 +192,6 @@ export const MatchDetail: React.FC<MatchDetailProps> = ({ match, onBackToList })
 
   const allSquadPlayers = [...starterPlayers, ...substitutePlayers];
 
-  const generateCollectiveReportText = () => {
-    const s = match.matchStats;
-    const homeTeam = match.isHome ? clubInfo.name : match.opponent;
-    const awayTeam = match.isHome ? match.opponent : clubInfo.name;
-    const dateStr = match.date ? `${match.date} ${match.time || ''}` : '';
-
-    const goalsEvents = match.events.filter(e => e.type === 'goal' || e.type === 'penalty_scored' || e.type === 'goal_conceded');
-    const cardsEvents = match.events.filter(e => e.type === 'yellow_card' || e.type === 'red_card');
-    const subsEvents = match.events.filter(e => e.type === 'sub_in_out');
-
-    return `==========================================================
-SAN LUIS DE QUILLOTA - INFORME DE ESTADÍSTICAS COLECTIVAS
-==========================================================
-Club: San Luis de Quillota (Canarios)
-Categoría: ${match.category} • Competición: ${match.competition} - ${match.matchDay}
-Partido: ${homeTeam} ${match.homeScore} - ${match.awayScore} ${awayTeam}
-Condición: ${match.isHome ? 'LOCAL' : 'VISITANTE'} • Esquema Táctico: ${match.formation}
-Estadio: ${match.venue} (${match.pitchType})
-${dateStr ? `Fecha / Hora: ${dateStr}` : ''}
-${match.referee ? `Árbitro: ${match.referee}` : ''}
-
-----------------------------------------------------------
-1. CUERPO TÉCNICO OFICIAL
-----------------------------------------------------------
-- Entrenador (D.T.): ${match.coachStaff.coach || 'Por asignar'}
-- Ayudante Técnico (A.T.): ${match.coachStaff.assistantCoach || 'Por asignar'}
-- PF (Preparador Físico): ${match.coachStaff.physicalTrainer || 'Por asignar'}
-- PA (Preparador de Arqueros): ${match.coachStaff.goalkeeperCoach || 'Por asignar'}
-- KIN (Kinesiólogo): ${match.coachStaff.kinesiologist || 'Por asignar'}
-- UT (Utilero): ${match.coachStaff.kitManager || 'Por asignar'}
-- COORD (Coordinador): ${match.coachStaff.coordinator || 'Por asignar'}
-
-----------------------------------------------------------
-2. ESTADÍSTICAS COLECTIVAS COMPARATIVAS
-----------------------------------------------------------
-Marcador Final: ${match.homeScore} vs ${match.awayScore}
-Posesión Estimada: ${s.possessionHome}% (Local) vs ${100 - s.possessionHome}% (Visita)
-Tiros Totales: ${s.shotsHome} vs ${s.shotsAway}
-Tiros a Puerta: ${s.shotsOnTargetHome} vs ${s.shotsOnTargetAway}
-Eficacia a Puerta: ${s.shotsHome > 0 ? Math.round((s.shotsOnTargetHome / s.shotsHome) * 100) : 0}%
-Córners / Tiros de Esquina: ${s.cornersHome} vs ${s.cornersAway}
-Faltas Cometidas: ${s.foulsHome} vs ${s.foulsAway}
-Tarjetas Amarillas Colectivas: ${s.yellowCardsHome ?? 0} vs ${s.yellowCardsAway ?? 0}
-Tarjetas Rojas Colectivas: ${s.redCardsHome ?? 0} vs ${s.redCardsAway ?? 0}
-Fueras de Juego: ${s.offsidesHome ?? 0} vs ${s.offsidesAway ?? 0}
-Balones Recuperados Colectivos: ${s.recoveriesHome ?? 0} vs ${s.recoveriesAway ?? 0}
-
-----------------------------------------------------------
-3. RESUMEN DE INCIDENCIAS
-----------------------------------------------------------
-* Goles (${goalsEvents.length}):
-${goalsEvents.length === 0 ? '  (Sin goles registrados)' : goalsEvents.map(g => {
-  const p = getPlayer(g.playerId);
-  return `  - Min. ${g.minute}': ${g.type === 'goal_conceded' ? `Gol rival ${g.opponentPlayerName ? `(${g.opponentPlayerName})` : ''}` : `Gol de #${p?.squadNumber} ${p?.lastName || ''}`} ${g.detail ? `(${g.detail})` : ''}`;
-}).join('\n')}
-
-* Tarjetas (${cardsEvents.length}):
-${cardsEvents.length === 0 ? '  (Sin tarjetas registradas)' : cardsEvents.map(c => {
-  const p = getPlayer(c.playerId);
-  return `  - Min. ${c.minute}': ${c.type === 'yellow_card' ? 'Amarilla' : 'Roja'} a #${p?.squadNumber} ${p?.lastName || ''} ${c.detail ? `(${c.detail})` : ''}`;
-}).join('\n')}
-
-* Sustituciones (${subsEvents.length}):
-${subsEvents.length === 0 ? '  (Sin cambios registrados)' : subsEvents.map(sb => {
-  const inP = getPlayer(sb.playerId);
-  const outP = getPlayer(sb.subOutPlayerId);
-  return `  - Min. ${sb.minute}': Entra #${inP?.squadNumber} ${inP?.lastName} por #${outP?.squadNumber} ${outP?.lastName}`;
-}).join('\n')}
-
-----------------------------------------------------------
-4. INFORME DEL ENTRENADOR
-----------------------------------------------------------
-Plan previo: ${match.tacticalNotesPre || 'N/A'}
-Ajustes descanso: ${match.tacticalNotesHalf || 'N/A'}
-Conclusiones post-partido: ${match.tacticalNotesPost || 'N/A'}
-==========================================================`;
-  };
-
-  const handleCopyReport = () => {
-    const text = generateCollectiveReportText();
-    navigator.clipboard.writeText(text);
-    setCopySuccess(true);
-    setTimeout(() => setCopySuccess(false), 2500);
-  };
-
   const handleDeleteMatch = () => {
     if (confirm(`¿Estás seguro de que deseas eliminar la planilla de "${match.title}"?`)) {
       deleteMatch(match.id);
@@ -277,6 +213,34 @@ Conclusiones post-partido: ${match.tacticalNotesPost || 'N/A'}
   // Submit manual event (non-live)
   const handleAddManualEvent = (e: React.FormEvent) => {
     e.preventDefault();
+    if (mEventType === 'injury') {
+      if (!mEventPlayerId) {
+        alert('Por favor selecciona al futbolista que salió lesionado.');
+        return;
+      }
+      if (!mEventInjuryDesc.trim()) {
+        alert('Por favor describe qué le pasó al jugador lesionado.');
+        return;
+      }
+      const targetP = getPlayer(mEventPlayerId);
+      recordMatchInjury(
+        match.id,
+        {
+          playerId: mEventPlayerId,
+          playerName: targetP ? (targetP.nickname || `${targetP.firstName} ${targetP.lastName}`) : 'Futbolista',
+          playerSquadNumber: targetP?.squadNumber,
+          minute: Number(mEventMinute),
+          description: mEventInjuryDesc.trim(),
+          injuryType: mEventInjuryType.trim() || 'Lesión en Partido Oficial',
+          bodyZone: mEventBodyZone.trim() || 'Por evaluar en kinesiología',
+          severity: mEventSeverity,
+        },
+        mEventSyncMedical
+      );
+      setMEventInjuryDesc('');
+      return;
+    }
+
     addMatchEvent(match.id, {
       minute: Number(mEventMinute),
       type: mEventType,
@@ -293,9 +257,64 @@ Conclusiones post-partido: ${match.tacticalNotesPost || 'N/A'}
     setMEventSubOutId('');
   };
 
+  // Submit quick injury from match sheet
+  const handleQuickRecordInjury = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quickInjuryPlayerId) {
+      alert('Por favor selecciona al futbolista que salió lesionado.');
+      return;
+    }
+    if (!quickInjuryDesc.trim()) {
+      alert('Por favor indica qué le pasó al futbolista.');
+      return;
+    }
+    const targetP = getPlayer(quickInjuryPlayerId);
+    recordMatchInjury(
+      match.id,
+      {
+        playerId: quickInjuryPlayerId,
+        playerName: targetP ? (targetP.nickname || `${targetP.firstName} ${targetP.lastName}`) : 'Futbolista',
+        playerSquadNumber: targetP?.squadNumber,
+        minute: Number(quickInjuryMinute),
+        description: quickInjuryDesc.trim(),
+        injuryType: quickInjuryType.trim() || 'Lesión en Partido Oficial',
+        bodyZone: quickInjuryZone.trim() || 'Por evaluar en kinesiología',
+        severity: quickInjurySeverity,
+      },
+      quickInjurySyncMedical
+    );
+    setIsQuickInjuryModalOpen(false);
+    setQuickInjuryDesc('');
+  };
+
   // Submit live event
   const handleSaveLiveEvent = (e: React.FormEvent) => {
     e.preventDefault();
+    if (liveEventType === 'injury') {
+      if (!liveEventPlayerId) {
+        alert('Por favor selecciona al futbolista lesionado.');
+        return;
+      }
+      const targetP = getPlayer(liveEventPlayerId);
+      recordMatchInjury(
+        match.id,
+        {
+          playerId: liveEventPlayerId,
+          playerName: targetP ? (targetP.nickname || `${targetP.firstName} ${targetP.lastName}`) : 'Futbolista',
+          playerSquadNumber: targetP?.squadNumber,
+          minute: Number(liveEventMinute),
+          description: liveEventDetail.trim() || 'Salió con dolor / traumatismo durante el partido en juego.',
+          injuryType: 'Lesión en Partido Oficial',
+          bodyZone: 'Por evaluar',
+          severity: 'Moderada',
+        },
+        true
+      );
+      setIsEventModalOpen(false);
+      setLiveEventDetail('');
+      return;
+    }
+
     addMatchEvent(match.id, {
       minute: Number(liveEventMinute),
       type: liveEventType,
@@ -428,16 +447,40 @@ Conclusiones post-partido: ${match.tacticalNotesPost || 'N/A'}
           </button>
 
           <button
-            onClick={() => setActiveTab('collective_stats')}
+            onClick={() => setActiveTab('physical_area')}
             className={`flex items-center gap-2 px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all ${
-              activeTab === 'collective_stats'
-                ? 'bg-amber-400 text-slate-950 font-black shadow'
+              activeTab === 'physical_area'
+                ? 'bg-amber-400 text-slate-950 font-black shadow-md shadow-amber-950/40'
                 : 'text-slate-400 hover:text-white hover:bg-slate-800'
             }`}
           >
-            <Activity className="w-3.5 h-3.5" />
-            <span>Estadísticas Colectivas</span>
+            <Dumbbell className="w-3.5 h-3.5" />
+            <span>Área Física (P.F.)</span>
+            <span className={`text-[10px] px-1.5 py-0.2 rounded font-bold ${
+              activeTab === 'physical_area' ? 'bg-amber-950 text-amber-200' : 'bg-slate-800 text-amber-400'
+            }`}>
+              Sub 14-20
+            </span>
           </button>
+
+          {match.category === 'Sub 20' && (
+            <button
+              onClick={() => setActiveTab('gps_sub20')}
+              className={`flex items-center gap-2 px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                activeTab === 'gps_sub20'
+                  ? 'bg-cyan-500 text-slate-950 font-black shadow-md shadow-cyan-950/40'
+                  : 'text-slate-400 hover:text-cyan-300 hover:bg-slate-800'
+              }`}
+            >
+              <Zap className="w-3.5 h-3.5" />
+              <span>Métricas GPS & PSE</span>
+              <span className={`text-[10px] px-1.5 py-0.2 rounded font-bold ${
+                activeTab === 'gps_sub20' ? 'bg-cyan-950 text-cyan-200' : 'bg-slate-800 text-cyan-400'
+              }`}>
+                Sub-20
+              </span>
+            </button>
+          )}
 
           <button
             onClick={() => setActiveTab('lineup')}
@@ -587,6 +630,7 @@ Conclusiones post-partido: ${match.tacticalNotesPost || 'N/A'}
                   <option value="yellow_card">🟨 Tarjeta Amarilla</option>
                   <option value="red_card">🟥 Tarjeta Roja</option>
                   <option value="sub_in_out">🔄 Sustitución / Cambio</option>
+                  <option value="injury">🚑 Futbolista que Salió Lesionado</option>
                 </select>
               </div>
 
@@ -667,57 +711,109 @@ Conclusiones post-partido: ${match.tacticalNotesPost || 'N/A'}
                 </div>
               )}
 
-              {mEventType === 'sub_in_out' && (
+              {mEventType === 'injury' && (
                 <>
                   <div className="sm:col-span-4">
-                    <label className="block font-semibold text-emerald-400 mb-1">Entra al campo</label>
+                    <label className="block font-semibold text-rose-400 mb-1">Futbolista que Salió Lesionado</label>
                     <select
                       value={mEventPlayerId}
                       onChange={(e) => setMEventPlayerId(e.target.value)}
                       required
-                      className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white"
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white font-bold"
                     >
-                      <option value="">Seleccionar sustituto...</option>
-                      {substitutePlayers.map((p) => (
-                        <option key={p.id} value={p.id}>#{p.squadNumber} {p.nickname || p.lastName}</option>
+                      <option value="">Seleccionar lesionado...</option>
+                      {allSquadPlayers.map((p) => (
+                        <option key={p.id} value={p.id}>#{p.squadNumber} {p.nickname || `${p.firstName} ${p.lastName}`} ({p.primaryPosition})</option>
                       ))}
                     </select>
                   </div>
 
-                  <div className="sm:col-span-3">
-                    <label className="block font-semibold text-rose-400 mb-1">Sale del campo</label>
-                    <select
-                      value={mEventSubOutId}
-                      onChange={(e) => setMEventSubOutId(e.target.value)}
+                  <div className="sm:col-span-4">
+                    <label className="block font-semibold text-slate-300 mb-1">Tipo de Lesión Sospechada</label>
+                    <input
+                      type="text"
+                      value={mEventInjuryType}
+                      onChange={(e) => setMEventInjuryType(e.target.value)}
+                      placeholder="ej: Desgarro, Esguince de tobillo, Golpe..."
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-4">
+                    <label className="block font-semibold text-slate-300 mb-1">Zona Corporal Afectada</label>
+                    <input
+                      type="text"
+                      value={mEventBodyZone}
+                      onChange={(e) => setMEventBodyZone(e.target.value)}
+                      placeholder="ej: Muslo posterior, Tobillo, Rodilla..."
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-8">
+                    <label className="block font-bold text-amber-400 mb-1">
+                      ¿Qué le pasó al jugador? (Mecanismo / Incidente) *
+                    </label>
+                    <input
+                      type="text"
                       required
+                      value={mEventInjuryDesc}
+                      onChange={(e) => setMEventInjuryDesc(e.target.value)}
+                      placeholder="ej: Choque con defensor al disputar balón aéreo, traumatismo en tobillo sin poder pisar..."
+                      className="w-full bg-slate-900 border border-rose-800 rounded-lg p-2 text-white"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-4">
+                    <label className="block font-semibold text-slate-300 mb-1">Gravedad Estimada</label>
+                    <select
+                      value={mEventSeverity}
+                      onChange={(e) => setMEventSeverity(e.target.value as any)}
                       className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white"
                     >
-                      <option value="">Seleccionar titular...</option>
-                      {starterPlayers.map((p) => (
-                        <option key={p.id} value={p.id}>#{p.squadNumber} {p.nickname || p.lastName}</option>
-                      ))}
+                      <option value="Leve">Leve (días de descanso)</option>
+                      <option value="Moderada">Moderada (1-3 semanas)</option>
+                      <option value="Grave">Grave (1-2 meses)</option>
+                      <option value="Muy Grave">Muy Grave (&gt;2 meses)</option>
                     </select>
+                  </div>
+
+                  <div className="sm:col-span-12 flex items-center gap-2 p-2.5 bg-rose-950/30 border border-rose-900/60 rounded-xl">
+                    <input
+                      type="checkbox"
+                      id="mEventSyncMedical"
+                      checked={mEventSyncMedical}
+                      onChange={(e) => setMEventSyncMedical(e.target.checked)}
+                      className="accent-rose-500 rounded cursor-pointer w-4 h-4"
+                    />
+                    <label htmlFor="mEventSyncMedical" className="text-xs text-rose-200 cursor-pointer">
+                      <strong>Registrar automáticamente en el Módulo Médico y Ficha:</strong> el futbolista pasará a estado <strong>Lesionado</strong> y quedará protegido frente a nuevas citaciones hasta su alta médica oficial.
+                    </label>
                   </div>
                 </>
               )}
 
-              <div className="sm:col-span-9">
-                <label className="block font-semibold text-slate-300 mb-1">Detalle o Descripción de la Jugada</label>
-                <input
-                  type="text"
-                  placeholder="ej. Remate de cabeza tras centro lateral, falta táctica..."
-                  value={mEventDetail}
-                  onChange={(e) => setMEventDetail(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white"
-                />
-              </div>
+              {mEventType !== 'injury' && (
+                <div className="sm:col-span-9">
+                  <label className="block font-semibold text-slate-300 mb-1">Detalle o Descripción de la Jugada</label>
+                  <input
+                    type="text"
+                    placeholder="ej. Remate de cabeza tras centro lateral, falta táctica..."
+                    value={mEventDetail}
+                    onChange={(e) => setMEventDetail(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white"
+                  />
+                </div>
+              )}
 
               <div className="sm:col-span-3 flex items-end">
                 <button
                   type="submit"
-                  className="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg transition-colors cursor-pointer"
+                  className={`w-full py-2 text-white font-bold rounded-lg transition-colors cursor-pointer ${
+                    mEventType === 'injury' ? 'bg-rose-600 hover:bg-rose-500 shadow-md shadow-rose-950/40' : 'bg-emerald-600 hover:bg-emerald-500'
+                  }`}
                 >
-                  + Añadir al Acta
+                  {mEventType === 'injury' ? '🚑 Registrar Lesionado' : '+ Añadir al Acta'}
                 </button>
               </div>
             </form>
@@ -753,13 +849,18 @@ Conclusiones post-partido: ${match.tacticalNotesPost || 'N/A'}
                             {ev.type === 'yellow_card' && `🟨 Tarjeta Amarilla: #${p?.squadNumber} ${p?.nickname || p?.lastName}`}
                             {ev.type === 'red_card' && `🟥 Tarjeta Roja: #${p?.squadNumber} ${p?.nickname || p?.lastName}`}
                             {ev.type === 'sub_in_out' && `🔄 Cambio: Entra #${p?.squadNumber} ${p?.lastName} por #${subOut?.squadNumber} ${subOut?.lastName}`}
+                            {ev.type === 'injury' && `🚑 Salió Lesionado: #${p?.squadNumber} ${p?.nickname || p?.lastName}`}
                           </p>
-                          {(ast || ev.detail) && (
+                          {ev.type === 'injury' ? (
+                            <p className="text-[11px] text-rose-300 mt-0.5">
+                              <strong className="text-amber-400">¿Qué le pasó?:</strong> {ev.injuryIncident?.description || ev.detail}
+                            </p>
+                          ) : (ast || ev.detail) ? (
                             <p className="text-[11px] text-slate-400 mt-0.5">
                               {ast && `Asistencia: #${ast.squadNumber} ${ast.lastName} • `}
                               {ev.detail}
                             </p>
-                          )}
+                          ) : null}
                         </div>
                       </div>
 
@@ -774,6 +875,115 @@ Conclusiones post-partido: ${match.tacticalNotesPost || 'N/A'}
                     </div>
                   );
                 })
+              )}
+            </div>
+
+            {/* DEDICATED SECTION: JUGADORES LESIONADOS EN ESTE PARTIDO */}
+            <div className="mt-6 pt-5 border-t border-slate-800">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-rose-600 text-white flex items-center justify-center font-black shadow-md shadow-rose-950/50">
+                    <Activity className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-2">
+                      <span>Futbolistas Lesionados en el Encuentro</span>
+                      <span className="text-[10px] bg-rose-950 text-rose-300 font-bold px-2 py-0.5 rounded-full border border-rose-800">
+                        {(match.injuryIncidents?.length || 0)} registrado(s)
+                      </span>
+                    </h4>
+                    <p className="text-[11px] text-slate-400">
+                      Reporte de quién salió lesionado y qué le pasó. Se sincroniza automáticamente con la ficha y parte médico.
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQuickInjuryPlayerId(allSquadPlayers[0]?.id || '');
+                    setQuickInjuryMinute(45);
+                    setQuickInjuryDesc('');
+                    setIsQuickInjuryModalOpen(true);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl shadow-md shadow-rose-950/40 transition-all hover:scale-[1.02] cursor-pointer self-start sm:self-auto"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>+ Reportar Jugador Lesionado</span>
+                </button>
+              </div>
+
+              {(!match.injuryIncidents || match.injuryIncidents.length === 0) ? (
+                <div className="p-3.5 bg-slate-950/60 rounded-xl border border-dashed border-slate-800 text-xs text-slate-400 flex items-center gap-2.5">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>No hay futbolistas lesionados reportados en este partido. Puedes usar el botón de arriba si alguien sufrió un golpe, traumatismo o lesión.</span>
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  {match.injuryIncidents.map((inc) => {
+                    const p = getPlayer(inc.playerId);
+                    return (
+                      <div
+                        key={inc.id}
+                        className="p-3.5 rounded-xl bg-gradient-to-r from-rose-950/25 via-slate-950 to-slate-950 border border-rose-900/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+                      >
+                        <div className="flex items-start gap-3">
+                          {p?.photoUrl ? (
+                            <img src={p.photoUrl} alt={inc.playerName} className="w-11 h-11 rounded-xl object-cover border-2 border-rose-500/60 shadow-md shrink-0" />
+                          ) : (
+                            <div className="w-11 h-11 rounded-xl bg-rose-950 text-rose-300 flex items-center justify-center font-black text-xs border border-rose-800 shrink-0">
+                              #{inc.playerSquadNumber || p?.squadNumber || '-'}
+                            </div>
+                          )}
+
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-mono font-black text-rose-300 bg-rose-950 px-2 py-0.5 rounded border border-rose-800">
+                                Minuto {inc.minute}'
+                              </span>
+                              <strong className="text-white text-sm">
+                                #{inc.playerSquadNumber || p?.squadNumber} {inc.playerName}
+                              </strong>
+                              {p?.primaryPosition && (
+                                <span className="text-[10px] text-amber-400 font-bold bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800">
+                                  [{p.primaryPosition}]
+                                </span>
+                              )}
+                              <span className="text-[9px] bg-emerald-950 text-emerald-300 font-bold px-1.5 py-0.5 rounded border border-emerald-800">
+                                ✓ En Ficha y Módulo Médico
+                              </span>
+                            </div>
+
+                            <div className="text-slate-200 text-xs">
+                              <strong className="text-amber-400">¿Qué le pasó?:</strong> {inc.description}
+                            </div>
+
+                            {(inc.injuryType || inc.bodyZone) && (
+                              <div className="text-[11px] text-slate-400 flex items-center gap-2 flex-wrap">
+                                <span>Diagnóstico: <strong className="text-white">{inc.injuryType}</strong></span>
+                                <span>•</span>
+                                <span>Zona: <strong className="text-amber-300">{inc.bodyZone}</strong></span>
+                                <span>•</span>
+                                <span>Gravedad: <strong className="text-rose-300">{inc.severity || 'Moderada'}</strong></span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 self-end sm:self-auto shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => removeMatchInjury(match.id, inc.id)}
+                            className="p-1.5 text-slate-400 hover:text-rose-400 rounded-lg hover:bg-slate-900 transition-colors cursor-pointer"
+                            title="Eliminar reporte de lesionado"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               )}
             </div>
           </div>
@@ -892,310 +1102,6 @@ Conclusiones post-partido: ${match.tacticalNotesPost || 'N/A'}
                   placeholder="Nombre y Apellidos"
                   className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white font-bold"
                 />
-              </div>
-            </div>
-          </div>
-
-          {/* Section: Complete Collective Match Statistics */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-              <div>
-                <h3 className="font-bold text-white text-sm flex items-center gap-2">
-                  <Activity className="w-4 h-4 text-amber-400" />
-                  Estadísticas Colectivas del Partido
-                </h3>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Métricas de equipo: disparos, posesión, córners, faltas, tarjetas y balones recuperados.
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setIsExtractModalOpen(true)}
-                className="inline-flex items-center gap-2 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-amber-400 hover:text-amber-300 font-bold text-xs rounded-xl border border-slate-700 shadow transition-colors cursor-pointer self-start sm:self-auto"
-              >
-                <FileDown className="w-4 h-4" />
-                <span>📥 Extraer Estadísticas Colectivas</span>
-              </button>
-            </div>
-
-            {/* Visual Possession bar */}
-            <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 mb-4">
-              <div className="flex items-center justify-between text-xs font-bold mb-1.5">
-                <span className="text-amber-400">{match.isHome ? clubInfo.name : match.opponent} ({match.matchStats.possessionHome}%)</span>
-                <span className="text-slate-400">Posesión Estimada</span>
-                <span className="text-slate-300">{match.isHome ? match.opponent : clubInfo.name} ({100 - match.matchStats.possessionHome}%)</span>
-              </div>
-              <div className="w-full h-3 bg-slate-800 rounded-full overflow-hidden flex">
-                <div
-                  className="h-full bg-amber-400 transition-all duration-300"
-                  style={{ width: `${match.matchStats.possessionHome}%` }}
-                />
-                <div
-                  className="h-full bg-slate-600 transition-all duration-300"
-                  style={{ width: `${100 - match.matchStats.possessionHome}%` }}
-                />
-              </div>
-              <input
-                type="range"
-                min={15}
-                max={85}
-                value={match.matchStats.possessionHome}
-                onChange={(e) => updateMatch(match.id, {
-                  matchStats: { ...match.matchStats, possessionHome: Number(e.target.value) }
-                })}
-                className="w-full mt-2 accent-amber-400 cursor-pointer"
-              />
-            </div>
-
-            {/* Grid of Collective Metrics */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
-              {/* Tiros Totales */}
-              <div className="bg-slate-950 p-3 rounded-xl border border-slate-800">
-                <span className="block text-slate-400 font-semibold mb-2">Tiros Totales</span>
-                <div className="grid grid-cols-2 gap-2 text-center">
-                  <div>
-                    <span className="text-[10px] text-slate-500 uppercase block">Local</span>
-                    <input
-                      type="number"
-                      min={0}
-                      value={match.matchStats.shotsHome}
-                      onChange={(e) => updateMatch(match.id, {
-                        matchStats: { ...match.matchStats, shotsHome: Number(e.target.value) }
-                      })}
-                      className="w-full bg-slate-900 border border-slate-700 rounded p-1 text-center font-bold text-white"
-                    />
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-500 uppercase block">Visita</span>
-                    <input
-                      type="number"
-                      min={0}
-                      value={match.matchStats.shotsAway}
-                      onChange={(e) => updateMatch(match.id, {
-                        matchStats: { ...match.matchStats, shotsAway: Number(e.target.value) }
-                      })}
-                      className="w-full bg-slate-900 border border-slate-700 rounded p-1 text-center font-bold text-white"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Tiros a Puerta */}
-              <div className="bg-slate-950 p-3 rounded-xl border border-slate-800">
-                <span className="block text-slate-400 font-semibold mb-2">Tiros a Puerta</span>
-                <div className="grid grid-cols-2 gap-2 text-center">
-                  <div>
-                    <span className="text-[10px] text-slate-500 uppercase block">Local</span>
-                    <input
-                      type="number"
-                      min={0}
-                      value={match.matchStats.shotsOnTargetHome}
-                      onChange={(e) => updateMatch(match.id, {
-                        matchStats: { ...match.matchStats, shotsOnTargetHome: Number(e.target.value) }
-                      })}
-                      className="w-full bg-slate-900 border border-slate-700 rounded p-1 text-center font-bold text-emerald-400"
-                    />
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-500 uppercase block">Visita</span>
-                    <input
-                      type="number"
-                      min={0}
-                      value={match.matchStats.shotsOnTargetAway}
-                      onChange={(e) => updateMatch(match.id, {
-                        matchStats: { ...match.matchStats, shotsOnTargetAway: Number(e.target.value) }
-                      })}
-                      className="w-full bg-slate-900 border border-slate-700 rounded p-1 text-center font-bold text-white"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Córners */}
-              <div className="bg-slate-950 p-3 rounded-xl border border-slate-800">
-                <span className="block text-slate-400 font-semibold mb-2">Córners</span>
-                <div className="grid grid-cols-2 gap-2 text-center">
-                  <div>
-                    <span className="text-[10px] text-slate-500 uppercase block">Local</span>
-                    <input
-                      type="number"
-                      min={0}
-                      value={match.matchStats.cornersHome}
-                      onChange={(e) => updateMatch(match.id, {
-                        matchStats: { ...match.matchStats, cornersHome: Number(e.target.value) }
-                      })}
-                      className="w-full bg-slate-900 border border-slate-700 rounded p-1 text-center font-bold text-white"
-                    />
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-500 uppercase block">Visita</span>
-                    <input
-                      type="number"
-                      min={0}
-                      value={match.matchStats.cornersAway}
-                      onChange={(e) => updateMatch(match.id, {
-                        matchStats: { ...match.matchStats, cornersAway: Number(e.target.value) }
-                      })}
-                      className="w-full bg-slate-900 border border-slate-700 rounded p-1 text-center font-bold text-white"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Faltas Cometidas */}
-              <div className="bg-slate-950 p-3 rounded-xl border border-slate-800">
-                <span className="block text-slate-400 font-semibold mb-2">Faltas Cometidas</span>
-                <div className="grid grid-cols-2 gap-2 text-center">
-                  <div>
-                    <span className="text-[10px] text-slate-500 uppercase block">Local</span>
-                    <input
-                      type="number"
-                      min={0}
-                      value={match.matchStats.foulsHome}
-                      onChange={(e) => updateMatch(match.id, {
-                        matchStats: { ...match.matchStats, foulsHome: Number(e.target.value) }
-                      })}
-                      className="w-full bg-slate-900 border border-slate-700 rounded p-1 text-center font-bold text-white"
-                    />
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-500 uppercase block">Visita</span>
-                    <input
-                      type="number"
-                      min={0}
-                      value={match.matchStats.foulsAway}
-                      onChange={(e) => updateMatch(match.id, {
-                        matchStats: { ...match.matchStats, foulsAway: Number(e.target.value) }
-                      })}
-                      className="w-full bg-slate-900 border border-slate-700 rounded p-1 text-center font-bold text-white"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Tarjetas Amarillas Colectivas */}
-              <div className="bg-slate-950 p-3 rounded-xl border border-slate-800">
-                <span className="block text-slate-400 font-semibold mb-2">Tarjetas Amarillas 🟨</span>
-                <div className="grid grid-cols-2 gap-2 text-center">
-                  <div>
-                    <span className="text-[10px] text-slate-500 uppercase block">Local</span>
-                    <input
-                      type="number"
-                      min={0}
-                      value={match.matchStats.yellowCardsHome ?? 0}
-                      onChange={(e) => updateMatch(match.id, {
-                        matchStats: { ...match.matchStats, yellowCardsHome: Number(e.target.value) }
-                      })}
-                      className="w-full bg-slate-900 border border-slate-700 rounded p-1 text-center font-bold text-amber-400"
-                    />
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-500 uppercase block">Visita</span>
-                    <input
-                      type="number"
-                      min={0}
-                      value={match.matchStats.yellowCardsAway ?? 0}
-                      onChange={(e) => updateMatch(match.id, {
-                        matchStats: { ...match.matchStats, yellowCardsAway: Number(e.target.value) }
-                      })}
-                      className="w-full bg-slate-900 border border-slate-700 rounded p-1 text-center font-bold text-white"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Tarjetas Rojas Colectivas */}
-              <div className="bg-slate-950 p-3 rounded-xl border border-slate-800">
-                <span className="block text-slate-400 font-semibold mb-2">Tarjetas Rojas 🟥</span>
-                <div className="grid grid-cols-2 gap-2 text-center">
-                  <div>
-                    <span className="text-[10px] text-slate-500 uppercase block">Local</span>
-                    <input
-                      type="number"
-                      min={0}
-                      value={match.matchStats.redCardsHome ?? 0}
-                      onChange={(e) => updateMatch(match.id, {
-                        matchStats: { ...match.matchStats, redCardsHome: Number(e.target.value) }
-                      })}
-                      className="w-full bg-slate-900 border border-slate-700 rounded p-1 text-center font-bold text-rose-400"
-                    />
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-500 uppercase block">Visita</span>
-                    <input
-                      type="number"
-                      min={0}
-                      value={match.matchStats.redCardsAway ?? 0}
-                      onChange={(e) => updateMatch(match.id, {
-                        matchStats: { ...match.matchStats, redCardsAway: Number(e.target.value) }
-                      })}
-                      className="w-full bg-slate-900 border border-slate-700 rounded p-1 text-center font-bold text-white"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Fueras de Juego */}
-              <div className="bg-slate-950 p-3 rounded-xl border border-slate-800">
-                <span className="block text-slate-400 font-semibold mb-2">Fueras de Juego</span>
-                <div className="grid grid-cols-2 gap-2 text-center">
-                  <div>
-                    <span className="text-[10px] text-slate-500 uppercase block">Local</span>
-                    <input
-                      type="number"
-                      min={0}
-                      value={match.matchStats.offsidesHome ?? 0}
-                      onChange={(e) => updateMatch(match.id, {
-                        matchStats: { ...match.matchStats, offsidesHome: Number(e.target.value) }
-                      })}
-                      className="w-full bg-slate-900 border border-slate-700 rounded p-1 text-center font-bold text-white"
-                    />
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-500 uppercase block">Visita</span>
-                    <input
-                      type="number"
-                      min={0}
-                      value={match.matchStats.offsidesAway ?? 0}
-                      onChange={(e) => updateMatch(match.id, {
-                        matchStats: { ...match.matchStats, offsidesAway: Number(e.target.value) }
-                      })}
-                      className="w-full bg-slate-900 border border-slate-700 rounded p-1 text-center font-bold text-white"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Balones Recuperados */}
-              <div className="bg-slate-950 p-3 rounded-xl border border-slate-800">
-                <span className="block text-slate-400 font-semibold mb-2">Balones Recuperados</span>
-                <div className="grid grid-cols-2 gap-2 text-center">
-                  <div>
-                    <span className="text-[10px] text-slate-500 uppercase block">Local</span>
-                    <input
-                      type="number"
-                      min={0}
-                      value={match.matchStats.recoveriesHome ?? 0}
-                      onChange={(e) => updateMatch(match.id, {
-                        matchStats: { ...match.matchStats, recoveriesHome: Number(e.target.value) }
-                      })}
-                      className="w-full bg-slate-900 border border-slate-700 rounded p-1 text-center font-bold text-amber-300"
-                    />
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-500 uppercase block">Visita</span>
-                    <input
-                      type="number"
-                      min={0}
-                      value={match.matchStats.recoveriesAway ?? 0}
-                      onChange={(e) => updateMatch(match.id, {
-                        matchStats: { ...match.matchStats, recoveriesAway: Number(e.target.value) }
-                      })}
-                      className="w-full bg-slate-900 border border-slate-700 rounded p-1 text-center font-bold text-white"
-                    />
-                  </div>
-                </div>
               </div>
             </div>
           </div>
@@ -1675,7 +1581,7 @@ Conclusiones post-partido: ${match.tacticalNotesPost || 'N/A'}
             </div>
 
             {/* Quick Event Buttons */}
-            <div className="mt-6 pt-5 border-t border-slate-800 grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+            <div className="mt-6 pt-5 border-t border-slate-800 grid grid-cols-2 sm:grid-cols-6 gap-2.5">
               <button
                 type="button"
                 onClick={() => {
@@ -1712,7 +1618,7 @@ Conclusiones post-partido: ${match.tacticalNotesPost || 'N/A'}
                 className="p-3 bg-amber-950/70 hover:bg-amber-900/80 border border-amber-800 text-amber-300 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-md cursor-pointer"
               >
                 <span>🟨</span>
-                <span>+ Tarjeta Amarilla</span>
+                <span>+ Amarilla</span>
               </button>
 
               <button
@@ -1725,7 +1631,7 @@ Conclusiones post-partido: ${match.tacticalNotesPost || 'N/A'}
                 className="p-3 bg-red-950/70 hover:bg-red-900/80 border border-red-800 text-red-300 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-md cursor-pointer"
               >
                 <span>🟥</span>
-                <span>+ Tarjeta Roja</span>
+                <span>+ Roja</span>
               </button>
 
               <button
@@ -1735,10 +1641,24 @@ Conclusiones post-partido: ${match.tacticalNotesPost || 'N/A'}
                   setLiveEventMinute(matchMinutes);
                   setIsEventModalOpen(true);
                 }}
-                className="p-3 bg-blue-950/70 hover:bg-blue-900/80 border border-blue-800 text-blue-300 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-md col-span-2 sm:col-span-1 cursor-pointer"
+                className="p-3 bg-blue-950/70 hover:bg-blue-900/80 border border-blue-800 text-blue-300 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-md cursor-pointer"
               >
                 <span>🔄</span>
                 <span>+ Sustitución</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setQuickInjuryPlayerId(starterPlayers[0]?.id || allSquadPlayers[0]?.id || '');
+                  setQuickInjuryMinute(matchMinutes);
+                  setQuickInjuryDesc('');
+                  setIsQuickInjuryModalOpen(true);
+                }}
+                className="p-3 bg-rose-950/80 hover:bg-rose-900 border border-rose-700 text-rose-300 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-md cursor-pointer"
+              >
+                <span>🚑</span>
+                <span>+ Lesionado</span>
               </button>
             </div>
           </div>
@@ -1974,367 +1894,14 @@ Conclusiones post-partido: ${match.tacticalNotesPost || 'N/A'}
         </div>
       )}
 
-      {/* TAB: ESTADÍSTICAS COLECTIVAS DE PARTIDO */}
-      {activeTab === 'collective_stats' && (
-        <div className="space-y-6">
-          {/* Hero Banner with Extract Action */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="w-6 h-6 rounded-md bg-amber-400 text-slate-950 font-black text-xs flex items-center justify-center">
-                    SLQ
-                  </span>
-                  <span className="text-xs font-bold text-amber-400 uppercase tracking-wider">
-                    San Luis de Quillota • Categoría {match.category}
-                  </span>
-                </div>
-                <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight flex items-center gap-2">
-                  <Activity className="w-5 h-5 text-amber-400" />
-                  Estadísticas Colectivas del Partido
-                </h2>
-                <p className="text-xs text-slate-400 mt-1">
-                  Análisis comparativo de equipo, rendimiento de juego, posesión territorial y disciplina táctica.
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2 flex-wrap">
-                <button
-                  type="button"
-                  onClick={() => setIsExtractModalOpen(true)}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs rounded-xl shadow-lg shadow-amber-950/40 transition-colors cursor-pointer"
-                >
-                  <FileDown className="w-4 h-4" />
-                  <span>📥 Extraer Estadísticas Colectivas</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('sheet')}
-                  className="inline-flex items-center gap-2 px-3.5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white font-bold text-xs rounded-xl border border-slate-700 transition-colors cursor-pointer"
-                >
-                  <FileSpreadsheet className="w-4 h-4" />
-                  <span>Planilla Oficial / PDF</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Match Header Scoreboard Card */}
-            <div className="mt-5 p-4 bg-slate-950 rounded-xl border border-slate-800 flex items-center justify-between flex-wrap gap-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-amber-400 text-slate-950 font-black text-sm flex items-center justify-center border border-slate-950 shadow">
-                  SLQ
-                </div>
-                <div>
-                  <h3 className="font-extrabold text-white text-base">
-                    {match.isHome ? clubInfo.name : match.opponent} vs {match.isHome ? match.opponent : clubInfo.name}
-                  </h3>
-                  <p className="text-xs text-slate-400">
-                    {match.competition} • {match.matchDay} ({match.category}) • {match.venue}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <div className="px-4 py-2 bg-slate-900 border border-slate-700 rounded-xl text-center">
-                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Marcador</span>
-                  <span className="text-2xl font-black text-white">
-                    {match.status === 'scheduled' ? 'VS' : `${match.homeScore} - ${match.awayScore}`}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Quick KPI Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg">
-              <span className="text-slate-400 text-xs font-semibold block">Posesión Estimada</span>
-              <div className="flex items-baseline justify-between mt-1">
-                <span className="text-2xl font-black text-amber-400">{match.matchStats.possessionHome}%</span>
-                <span className="text-xs text-slate-400">Rival: {100 - match.matchStats.possessionHome}%</span>
-              </div>
-              <p className="text-[11px] text-slate-500 mt-1">Control del balón durante el encuentro</p>
-            </div>
-
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg">
-              <span className="text-slate-400 text-xs font-semibold block">Tiros Totales / Puerta</span>
-              <div className="flex items-baseline justify-between mt-1">
-                <span className="text-2xl font-black text-white">
-                  {match.matchStats.shotsHome} <span className="text-sm font-normal text-slate-400">({match.matchStats.shotsOnTargetHome} a puerta)</span>
-                </span>
-              </div>
-              <p className="text-[11px] text-emerald-400 mt-1">
-                Eficacia: {match.matchStats.shotsHome > 0 ? Math.round((match.matchStats.shotsOnTargetHome / match.matchStats.shotsHome) * 100) : 0}% al arco
-              </p>
-            </div>
-
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg">
-              <span className="text-slate-400 text-xs font-semibold block">Balones Recuperados</span>
-              <div className="flex items-baseline justify-between mt-1">
-                <span className="text-2xl font-black text-amber-300">{match.matchStats.recoveriesHome ?? 0}</span>
-                <span className="text-xs text-slate-400">Rival: {match.matchStats.recoveriesAway ?? 0}</span>
-              </div>
-              <p className="text-[11px] text-slate-500 mt-1">Presión y recuperaciones colectivas</p>
-            </div>
-
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg">
-              <span className="text-slate-400 text-xs font-semibold block">Disciplina Colectiva</span>
-              <div className="flex items-baseline justify-between mt-1">
-                <span className="text-xl font-bold text-white">
-                  {match.matchStats.foulsHome} faltas
-                </span>
-                <span className="text-xs font-bold text-amber-400">
-                  {match.matchStats.yellowCardsHome ?? 0}🟨 {match.matchStats.redCardsHome ?? 0}🟥
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-500 mt-1">Córners a favor: {match.matchStats.cornersHome}</p>
-            </div>
-          </div>
-
-          {/* Detailed Comparative Metrics Table / Control Center */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-bold text-white text-base flex items-center gap-2">
-                <Activity className="w-4 h-4 text-amber-400" />
-                Desglose Comparativo Colectivo (Ajustable con + / -)
-              </h3>
-              <span className="text-xs text-slate-400 font-semibold">
-                San Luis ({match.isHome ? 'Local' : 'Visita'}) vs Rival
-              </span>
-            </div>
-
-            <div className="space-y-4">
-              {/* Posesión bar */}
-              <div className="p-3 bg-slate-950 rounded-xl border border-slate-800">
-                <div className="flex items-center justify-between text-xs font-bold mb-2">
-                  <span className="text-amber-400">{match.isHome ? clubInfo.name : match.opponent}: {match.matchStats.possessionHome}%</span>
-                  <span className="text-slate-400 uppercase text-[10px]">Posesión Estimada</span>
-                  <span className="text-slate-300">{match.isHome ? match.opponent : clubInfo.name}: {100 - match.matchStats.possessionHome}%</span>
-                </div>
-                <div className="w-full h-3 bg-slate-800 rounded-full overflow-hidden flex">
-                  <div
-                    className="h-full bg-amber-400 transition-all duration-300"
-                    style={{ width: `${match.matchStats.possessionHome}%` }}
-                  />
-                  <div
-                    className="h-full bg-slate-600 transition-all duration-300"
-                    style={{ width: `${100 - match.matchStats.possessionHome}%` }}
-                  />
-                </div>
-                <div className="flex items-center justify-between gap-2 mt-2">
-                  <button
-                    type="button"
-                    onClick={() => updateMatch(match.id, {
-                      matchStats: { ...match.matchStats, possessionHome: Math.max(10, match.matchStats.possessionHome - 5) }
-                    })}
-                    className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 text-xs hover:bg-slate-700"
-                  >
-                    -5%
-                  </button>
-                  <input
-                    type="range"
-                    min={15}
-                    max={85}
-                    value={match.matchStats.possessionHome}
-                    onChange={(e) => updateMatch(match.id, {
-                      matchStats: { ...match.matchStats, possessionHome: Number(e.target.value) }
-                    })}
-                    className="w-full accent-amber-400 cursor-pointer"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => updateMatch(match.id, {
-                      matchStats: { ...match.matchStats, possessionHome: Math.min(90, match.matchStats.possessionHome + 5) }
-                    })}
-                    className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 text-xs hover:bg-slate-700"
-                  >
-                    +5%
-                  </button>
-                </div>
-              </div>
-
-              {/* Comparative rows list */}
-              {[
-                { label: 'Tiros Totales', keyHome: 'shotsHome', keyAway: 'shotsAway', homeVal: match.matchStats.shotsHome, awayVal: match.matchStats.shotsAway },
-                { label: 'Tiros a Puerta', keyHome: 'shotsOnTargetHome', keyAway: 'shotsOnTargetAway', homeVal: match.matchStats.shotsOnTargetHome, awayVal: match.matchStats.shotsOnTargetAway },
-                { label: 'Tiros de Esquina (Córners)', keyHome: 'cornersHome', keyAway: 'cornersAway', homeVal: match.matchStats.cornersHome, awayVal: match.matchStats.cornersAway },
-                { label: 'Faltas Cometidas', keyHome: 'foulsHome', keyAway: 'foulsAway', homeVal: match.matchStats.foulsHome, awayVal: match.matchStats.foulsAway },
-                { label: 'Tarjetas Amarillas 🟨', keyHome: 'yellowCardsHome', keyAway: 'yellowCardsAway', homeVal: match.matchStats.yellowCardsHome ?? 0, awayVal: match.matchStats.yellowCardsAway ?? 0 },
-                { label: 'Tarjetas Rojas 🟥', keyHome: 'redCardsHome', keyAway: 'redCardsAway', homeVal: match.matchStats.redCardsHome ?? 0, awayVal: match.matchStats.redCardsAway ?? 0 },
-                { label: 'Fueras de Juego (Offsides)', keyHome: 'offsidesHome', keyAway: 'offsidesAway', homeVal: match.matchStats.offsidesHome ?? 0, awayVal: match.matchStats.offsidesAway ?? 0 },
-                { label: 'Balones Recuperados', keyHome: 'recoveriesHome', keyAway: 'recoveriesAway', homeVal: match.matchStats.recoveriesHome ?? 0, awayVal: match.matchStats.recoveriesAway ?? 0 },
-              ].map((item) => {
-                const total = (item.homeVal + item.awayVal) || 1;
-                const homePct = Math.round((item.homeVal / total) * 100);
-
-                return (
-                  <div key={item.label} className="p-3 bg-slate-950 rounded-xl border border-slate-800 text-xs">
-                    <div className="flex items-center justify-between font-bold mb-1.5">
-                      {/* Left: Home control */}
-                      <div className="flex items-center gap-1.5 w-32">
-                        <button
-                          type="button"
-                          onClick={() => updateMatch(match.id, {
-                            matchStats: { ...match.matchStats, [item.keyHome]: Math.max(0, item.homeVal - 1) }
-                          })}
-                          className="w-6 h-6 rounded bg-slate-800 text-slate-300 font-bold hover:bg-slate-700 flex items-center justify-center cursor-pointer"
-                        >
-                          -
-                        </button>
-                        <span className="font-mono text-base font-black text-amber-400 w-8 text-center">{item.homeVal}</span>
-                        <button
-                          type="button"
-                          onClick={() => updateMatch(match.id, {
-                            matchStats: { ...match.matchStats, [item.keyHome]: item.homeVal + 1 }
-                          })}
-                          className="w-6 h-6 rounded bg-slate-800 text-slate-300 font-bold hover:bg-slate-700 flex items-center justify-center cursor-pointer"
-                        >
-                          +
-                        </button>
-                      </div>
-
-                      {/* Center: Label */}
-                      <span className="text-slate-300 uppercase tracking-wider text-[11px] text-center font-bold">
-                        {item.label}
-                      </span>
-
-                      {/* Right: Away control */}
-                      <div className="flex items-center gap-1.5 w-32 justify-end">
-                        <button
-                          type="button"
-                          onClick={() => updateMatch(match.id, {
-                            matchStats: { ...match.matchStats, [item.keyAway]: Math.max(0, item.awayVal - 1) }
-                          })}
-                          className="w-6 h-6 rounded bg-slate-800 text-slate-300 font-bold hover:bg-slate-700 flex items-center justify-center cursor-pointer"
-                        >
-                          -
-                        </button>
-                        <span className="font-mono text-base font-black text-white w-8 text-center">{item.awayVal}</span>
-                        <button
-                          type="button"
-                          onClick={() => updateMatch(match.id, {
-                            matchStats: { ...match.matchStats, [item.keyAway]: item.awayVal + 1 }
-                          })}
-                          className="w-6 h-6 rounded bg-slate-800 text-slate-300 font-bold hover:bg-slate-700 flex items-center justify-center cursor-pointer"
-                        >
-                          +
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Progress split bar */}
-                    <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden flex">
-                      <div className="h-full bg-amber-400" style={{ width: `${homePct}%` }} />
-                      <div className="h-full bg-slate-600" style={{ width: `${100 - homePct}%` }} />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Coaching Staff Summary Card for this match */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl">
-            <h3 className="font-bold text-white text-base mb-3 flex items-center gap-2">
-              <Shield className="w-4 h-4 text-amber-400" />
-              Cuerpo Técnico Presente en el Encuentro
-            </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
-              <div className="p-3 bg-slate-950 rounded-xl border border-slate-800">
-                <span className="text-slate-500 font-semibold block text-[10px] uppercase">Entrenador (D.T.)</span>
-                <span className="text-white font-bold text-sm">{match.coachStaff.coach || 'Por asignar'}</span>
-              </div>
-              <div className="p-3 bg-slate-950 rounded-xl border border-slate-800">
-                <span className="text-slate-500 font-semibold block text-[10px] uppercase">Ayudante Técnico (A.T.)</span>
-                <span className="text-white font-bold text-sm">{match.coachStaff.assistantCoach || 'Por asignar'}</span>
-              </div>
-              <div className="p-3 bg-slate-950 rounded-xl border border-slate-800">
-                <span className="text-slate-500 font-semibold block text-[10px] uppercase">PF (Preparador Físico)</span>
-                <span className="text-white font-bold text-sm">{match.coachStaff.physicalTrainer || 'Por asignar'}</span>
-              </div>
-              <div className="p-3 bg-slate-950 rounded-xl border border-slate-800">
-                <span className="text-slate-500 font-semibold block text-[10px] uppercase">PA (Preparador de Arqueros)</span>
-                <span className="text-white font-bold text-sm">{match.coachStaff.goalkeeperCoach || 'Por asignar'}</span>
-              </div>
-              <div className="p-3 bg-slate-950 rounded-xl border border-slate-800">
-                <span className="text-slate-500 font-semibold block text-[10px] uppercase">KIN (Kinesiólogo)</span>
-                <span className="text-white font-bold text-sm">{match.coachStaff.kinesiologist || 'Por asignar'}</span>
-              </div>
-              <div className="p-3 bg-slate-950 rounded-xl border border-slate-800">
-                <span className="text-slate-500 font-semibold block text-[10px] uppercase">UT (Utilero)</span>
-                <span className="text-white font-bold text-sm">{match.coachStaff.kitManager || 'Por asignar'}</span>
-              </div>
-              <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 sm:col-span-2">
-                <span className="text-slate-500 font-semibold block text-[10px] uppercase">COORD (Coordinador)</span>
-                <span className="text-white font-bold text-sm">{match.coachStaff.coordinator || 'Por asignar'}</span>
-              </div>
-            </div>
-          </div>
-        </div>
+      {/* TAB: ÁREA FÍSICA (P.F.) - Sub 14 a Sub 20 */}
+      {activeTab === 'physical_area' && (
+        <MatchPhysicalReportTab match={match} />
       )}
 
-      {/* EXTRACT COLLECTIVE STATS MODAL */}
-      {isExtractModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-xs overflow-y-auto">
-          <div className="relative w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden my-6">
-            <div className="flex items-center justify-between p-5 border-b border-slate-800 bg-slate-950">
-              <div className="flex items-center gap-2">
-                <Activity className="w-5 h-5 text-amber-400" />
-                <div>
-                  <h3 className="text-base font-bold text-white">
-                    Informe de Estadísticas Colectivas Extraído
-                  </h3>
-                  <p className="text-xs text-slate-400">
-                    {match.title} • {match.category}
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsExtractModalOpen(false)}
-                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
-              <div className="flex items-center justify-between gap-2 flex-wrap">
-                <p className="text-xs text-slate-300">
-                  Resumen estadístico listo para compartir con el cuerpo técnico o archivar:
-                </p>
-
-                <button
-                  type="button"
-                  onClick={handleCopyReport}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs rounded-lg shadow transition-colors cursor-pointer"
-                >
-                  <ClipboardCheck className="w-4 h-4" />
-                  <span>{copySuccess ? '¡Copiado con Éxito!' : 'Copiar Texto al Portapapeles'}</span>
-                </button>
-              </div>
-
-              {/* Formatted Text Box */}
-              <pre className="p-4 bg-slate-950 border border-slate-800 rounded-xl text-xs font-mono text-slate-300 whitespace-pre-wrap select-all leading-relaxed">
-                {generateCollectiveReportText()}
-              </pre>
-            </div>
-
-            <div className="p-4 border-t border-slate-800 bg-slate-950/80 flex items-center justify-between">
-              <span className="text-[11px] text-slate-500">
-                Club Deportivo San Luis de Quillota • Fútbol Formativo
-              </span>
-              <button
-                type="button"
-                onClick={() => setIsExtractModalOpen(false)}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-xl transition-colors cursor-pointer"
-              >
-                Cerrar
-              </button>
-            </div>
-          </div>
-        </div>
+      {/* TAB: MÉTRICAS GPS & PSE (EXCLUSIVO SUB-20) */}
+      {activeTab === 'gps_sub20' && (
+        <Sub20GpsReportTab match={match} />
       )}
 
       {/* SLOT ASSIGNMENT MODAL (Select player for starting slot) */}
@@ -2359,32 +1926,48 @@ Conclusiones post-partido: ${match.tacticalNotesPost || 'N/A'}
               {players.map((p) => {
                 const isAlreadyStarting = starterPlayerIds.includes(p.id);
                 const posConfig = POSITION_LABELS[p.primaryPosition] || POSITION_LABELS['MC'];
+                const isInjured = p.status === 'Lesionado';
 
                 return (
                   <button
                     key={p.id}
                     type="button"
+                    disabled={isInjured}
                     onClick={() => handleSelectPlayerForSlot(p.id)}
-                    className="w-full flex items-center justify-between p-2.5 rounded-xl bg-slate-950 hover:bg-emerald-950/40 border border-slate-800 hover:border-emerald-600 text-left transition-colors cursor-pointer"
+                    className={`w-full flex items-center justify-between p-2.5 rounded-xl border text-left transition-colors ${
+                      isInjured
+                        ? 'opacity-40 cursor-not-allowed bg-rose-950/20 border-rose-900/60'
+                        : 'bg-slate-950 hover:bg-emerald-950/40 border-slate-800 hover:border-emerald-600 cursor-pointer'
+                    }`}
                   >
                     <div className="flex items-center gap-2.5">
-                      <span className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center font-black text-xs text-white">
+                      <span className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-xs ${
+                        isInjured ? 'bg-rose-950 text-rose-400' : 'bg-slate-800 text-white'
+                      }`}>
                         #{p.squadNumber}
                       </span>
                       <div>
-                        <p className="font-bold text-white text-xs">{p.nickname || `${p.firstName} ${p.lastName}`}</p>
+                        <p className={`font-bold text-xs ${isInjured ? 'text-rose-300' : 'text-white'}`}>
+                          {p.nickname || `${p.firstName} ${p.lastName}`}
+                        </p>
                         <div className="flex items-center gap-1.5 mt-0.5">
                           <span className={`text-[9px] font-bold px-1 rounded uppercase ${posConfig.color}`}>
                             {p.primaryPosition}
                           </span>
-                          {p.status !== 'Disponible' && (
+                          {isInjured ? (
+                            <span className="text-[9px] text-rose-400 font-bold bg-rose-950 px-1 py-0.2 rounded border border-rose-800">
+                              🚫 Lesionado (Baja médica)
+                            </span>
+                          ) : p.status !== 'Disponible' ? (
                             <span className="text-[9px] text-amber-400 font-semibold">({p.status})</span>
-                          )}
+                          ) : null}
                         </div>
                       </div>
                     </div>
 
-                    {isAlreadyStarting ? (
+                    {isInjured ? (
+                      <span className="text-[10px] text-rose-400 font-bold">No convocable</span>
+                    ) : isAlreadyStarting ? (
                       <span className="text-[10px] text-slate-400 font-medium">Reubicar</span>
                     ) : (
                       <span className="text-xs text-emerald-400 font-bold">+ Seleccionar</span>
@@ -2428,6 +2011,7 @@ Conclusiones post-partido: ${match.tacticalNotesPost || 'N/A'}
                     <option value="yellow_card">🟨 Tarjeta Amarilla</option>
                     <option value="red_card">🟥 Tarjeta Roja</option>
                     <option value="sub_in_out">🔄 Sustitución</option>
+                    <option value="injury">🚑 Lesión / Salida por Lesión</option>
                   </select>
                 </div>
 
@@ -2443,6 +2027,23 @@ Conclusiones post-partido: ${match.tacticalNotesPost || 'N/A'}
                   />
                 </div>
               </div>
+
+              {liveEventType === 'injury' && (
+                <div>
+                  <label className="block font-semibold text-rose-400 mb-1">Futbolista que Salió Lesionado</label>
+                  <select
+                    value={liveEventPlayerId}
+                    onChange={(e) => setLiveEventPlayerId(e.target.value)}
+                    required
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white font-bold"
+                  >
+                    <option value="">Selecciona lesionado...</option>
+                    {allSquadPlayers.map((p) => (
+                      <option key={p.id} value={p.id}>#{p.squadNumber} {p.nickname || `${p.firstName} ${p.lastName}`} ({p.primaryPosition})</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               {liveEventType === 'goal' && (
                 <>
@@ -2542,10 +2143,12 @@ Conclusiones post-partido: ${match.tacticalNotesPost || 'N/A'}
               )}
 
               <div>
-                <label className="block font-semibold text-slate-300 mb-1">Detalle o Descripción de la Jugada</label>
+                <label className="block font-semibold text-slate-300 mb-1">
+                  {liveEventType === 'injury' ? '¿Qué le pasó al futbolista? (Mecanismo / Incidente)' : 'Detalle o Descripción de la Jugada'}
+                </label>
                 <input
                   type="text"
-                  placeholder="ej. Cabezazo al segundo palo, falta táctica cortando contragolpe..."
+                  placeholder={liveEventType === 'injury' ? 'ej. Choque con rival, dolor agudo en rodilla y no puede apoyar' : 'ej. Cabezazo al segundo palo, falta táctica...'}
                   value={liveEventDetail}
                   onChange={(e) => setLiveEventDetail(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white"
@@ -2562,9 +2165,153 @@ Conclusiones post-partido: ${match.tacticalNotesPost || 'N/A'}
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg shadow cursor-pointer"
+                  className={`px-4 py-1.5 text-white font-bold rounded-lg shadow cursor-pointer ${
+                    liveEventType === 'injury' ? 'bg-rose-600 hover:bg-rose-500' : 'bg-emerald-600 hover:bg-emerald-500'
+                  }`}
                 >
-                  Añadir al Acta
+                  {liveEventType === 'injury' ? '🚑 Registrar Lesión' : 'Añadir al Acta'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* QUICK REPORT INJURY MODAL (Directly from Match Sheet) */}
+      {isQuickInjuryModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/80 backdrop-blur-xs">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg p-5 shadow-2xl">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800 mb-4">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-rose-600 text-white flex items-center justify-center font-bold">
+                  <Activity className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-white text-base">
+                    Reportar Jugador Lesionado en este Partido
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Se añade al acta del partido y se guarda en la ficha del jugador
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsQuickInjuryModalOpen(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleQuickRecordInjury} className="space-y-4 text-xs">
+              <div className="grid grid-cols-3 gap-3">
+                <div className="col-span-2">
+                  <label className="block font-semibold text-rose-400 mb-1">Futbolista que Salió Lesionado *</label>
+                  <select
+                    value={quickInjuryPlayerId}
+                    onChange={(e) => setQuickInjuryPlayerId(e.target.value)}
+                    required
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white font-bold"
+                  >
+                    <option value="">Seleccionar futbolista...</option>
+                    {allSquadPlayers.map((p) => (
+                      <option key={p.id} value={p.id}>#{p.squadNumber} {p.nickname || `${p.firstName} ${p.lastName}`} ({p.primaryPosition})</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-300 mb-1">Minuto *</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={120}
+                    value={quickInjuryMinute}
+                    onChange={(e) => setQuickInjuryMinute(Number(e.target.value))}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white font-bold"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-amber-400 mb-1">
+                  ¿Qué le pasó al jugador? (Mecanismo del trauma / Dolor) *
+                </label>
+                <textarea
+                  rows={2}
+                  required
+                  value={quickInjuryDesc}
+                  onChange={(e) => setQuickInjuryDesc(e.target.value)}
+                  placeholder="Detalla qué ocurrió (ej: Choque con rival en disputa aérea, dolor agudo e inflamación en rodilla derecha sin poder continuar)..."
+                  className="w-full bg-slate-950 border border-rose-800/80 rounded-xl p-2.5 text-white"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-300 mb-1">Tipo de Lesión Sospechada</label>
+                  <input
+                    type="text"
+                    value={quickInjuryType}
+                    onChange={(e) => setQuickInjuryType(e.target.value)}
+                    placeholder="ej: Desgarro, Esguince..."
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-300 mb-1">Zona Corporal Afectada</label>
+                  <input
+                    type="text"
+                    value={quickInjuryZone}
+                    onChange={(e) => setQuickInjuryZone(e.target.value)}
+                    placeholder="ej: Rodilla, Tobillo..."
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-300 mb-1">Gravedad Estimada</label>
+                <select
+                  value={quickInjurySeverity}
+                  onChange={(e) => setQuickInjurySeverity(e.target.value as any)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white"
+                >
+                  <option value="Leve">Leve (días de baja)</option>
+                  <option value="Moderada">Moderada (1-3 semanas de baja)</option>
+                  <option value="Grave">Grave (1-2 meses de baja)</option>
+                  <option value="Muy Grave">Muy Grave (&gt; 2 meses de baja)</option>
+                </select>
+              </div>
+
+              <div className="flex items-center gap-2 p-2.5 bg-rose-950/20 border border-rose-900/40 rounded-xl">
+                <input
+                  type="checkbox"
+                  id="quickInjurySyncMedical"
+                  checked={quickInjurySyncMedical}
+                  onChange={(e) => setQuickInjurySyncMedical(e.target.checked)}
+                  className="accent-rose-500 rounded cursor-pointer w-4 h-4"
+                />
+                <label htmlFor="quickInjurySyncMedical" className="text-xs text-rose-200 cursor-pointer">
+                  <strong>Guardar en el Módulo Médico y Ficha del Jugador</strong> (bloqueará automáticamente futuras citaciones hasta el alta médica).
+                </label>
+              </div>
+
+              <div className="pt-3 border-t border-slate-800 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsQuickInjuryModalOpen(false)}
+                  className="px-3 py-1.5 bg-slate-800 text-slate-300 rounded-lg font-semibold cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-lg shadow-md shadow-rose-950/50 cursor-pointer"
+                >
+                  Guardar Lesionado en Planilla
                 </button>
               </div>
             </form>

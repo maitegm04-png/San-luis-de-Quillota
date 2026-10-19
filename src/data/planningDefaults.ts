@@ -67,12 +67,10 @@ export function createEmptyWeeklyPlan(category: string, year: number, weekNumber
   const arqueros = {} as Record<DayOfWeek, DayGoalkeeperPlan>;
 
   weekDates.forEach((wd) => {
-    const isSunday = wd.key === 'domingo';
-
     tecnica[wd.key] = {
       fecha: wd.displayDate,
-      sesionTitulo: isSunday ? 'LIBRE' : '',
-      isFreeDay: isSunday,
+      sesionTitulo: '',
+      isFreeDay: false,
       bloques: [
         { estructura: '', modulo: '' },
         { estructura: '', modulo: '' },
@@ -83,42 +81,42 @@ export function createEmptyWeeklyPlan(category: string, year: number, weekNumber
 
     fisica[wd.key] = {
       fecha: wd.displayDate,
-      cargaDelDia: isSunday ? 'Descanso / LIBRE' : '',
-      isFreeDay: isSunday,
+      cargaDelDia: 'Media (MD)',
+      isFreeDay: false,
       preSesion: {
-        tipo: '',
+        tipo: 'Activación y Movilidad Articular',
         descripcion: ''
       },
       sesion: {
         bloques: [
-          { tipo: '', descripcion: '' },
-          { tipo: '', descripcion: '' },
+          { tipo: 'Resistencia Aeróbica / Capacidad', descripcion: '' },
+          { tipo: 'Velocidad y Agilidad', descripcion: '' },
           { tipo: '', descripcion: '' }
         ]
       },
       complementario: {
-        tipo: '',
+        tipo: 'Core y Estabilidad Lumbo-Pélvica',
         descripcion: ''
       }
     };
 
     arqueros[wd.key] = {
       fecha: wd.displayDate,
-      objetivoDelDia: isSunday ? 'LIBRE' : '',
-      isFreeDay: isSunday,
+      objetivoDelDia: '',
+      isFreeDay: false,
       preSesion: {
-        tipo: '',
+        tipo: 'Activación Específica y Coordinación Manual',
         descripcion: ''
       },
       sesion: {
         bloques: [
-          { tipo: '', descripcion: '' },
-          { tipo: '', descripcion: '' },
+          { tipo: 'Blocaje y Posicionamiento Bajo los Tres Palos', descripcion: '' },
+          { tipo: 'Juego Aéreo y Salidas en Balón Parado', descripcion: '' },
           { tipo: '', descripcion: '' }
         ]
       },
       complementario: {
-        tipo: '',
+        tipo: 'Juego de Pies y Salida con Balón',
         descripcion: ''
       }
     };

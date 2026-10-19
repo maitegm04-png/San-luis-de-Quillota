@@ -1,7 +1,8 @@
 import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
+import html2canvas from 'html2canvas-pro';
 import { Player } from '../types/football';
 import { POSITION_LABELS } from '../data/mockData';
+import { sanitizeClonedDocColors } from './pdfColorSanitizer';
 
 export interface PlayerFichaExportOptions {
   player: Player;
@@ -55,6 +56,9 @@ export async function exportPlayerFichaToPdf(
       backgroundColor: '#ffffff',
       logging: false,
       windowWidth: 900,
+      onclone: (clonedDoc) => {
+        sanitizeClonedDocColors(clonedDoc);
+      }
     });
 
     const imgData = canvas.toDataURL('image/png');

@@ -1,5 +1,5 @@
-import React from 'react';
-import { Player } from '../../types/football';
+import React, { useState } from 'react';
+import { Player, PlayerInjury } from '../../types/football';
 import { useFootball } from '../../context/FootballContext';
 import { POSITION_LABELS } from '../../data/mockData';
 import { 
@@ -15,8 +15,12 @@ import {
   Clock, 
   Edit, 
   Trash2,
-  Trophy
+  Trophy,
+  Plus,
+  Stethoscope
 } from 'lucide-react';
+import { PlayerFichaPdfModal } from './PlayerFichaPdfModal';
+import { InjuryFormModal } from '../Injuries/InjuryFormModal';
 
 interface PlayerModalProps {
   player: Player | null;
@@ -25,9 +29,30 @@ interface PlayerModalProps {
 }
 
 export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose, onEdit }) => {
-  const { deletePlayer, matches } = useFootball();
+  const { deletePlayer, matches, injuries, dischargeInjury } = useFootball();
+  const [showFichaPdf, setShowFichaPdf] = useState(false);
+  const [isInjuryFormOpen, setIsInjuryFormOpen] = useState(false);
+  const [injuryToEdit, setInjuryToEdit] = useState<PlayerInjury | null>(null);
 
   if (!player) return null;
+
+  const rawInjuries = [
+    ...injuries.filter((i) => i.playerId === player.id),
+    ...(player.injuries || [])
+  ];
+  const seenIds = new Set<string>();
+  const playerInjuries = rawInjuries
+    .filter((inj) => {
+      const key = inj.id || `${inj.dateInjured}-${inj.injuryType}`;
+      if (seenIds.has(key)) return false;
+      seenIds.add(key);
+      return true;
+    })
+    .sort((a, b) => new Date(b.dateInjured).getTime() - new Date(a.dateInjured).getTime());
+
+  const activeInjury = playerInjuries.find(
+    (i) => i.status === 'Lesionado' || i.status === 'En Recuperación' || i.status === 'Activa'
+  );
 
   const posConfig = POSITION_LABELS[player.primaryPosition] || POSITION_LABELS['MC'];
 
@@ -130,7 +155,16 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose, onEdi
             </div>
 
             {/* Quick Actions */}
-            <div className="flex items-center gap-2 self-end sm:self-auto">
+            <div className="flex items-center gap-2 self-end sm:self-auto flex-wrap">
+              <button
+                type="button"
+                onClick={() => setShowFichaPdf(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-black text-slate-950 bg-amber-400 hover:bg-amber-300 rounded-lg shadow transition-all hover:scale-105 cursor-pointer"
+                title="Generar e imprimir Ficha Oficial del Jugador"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>Ficha PDF / Imprimir</span>
+              </button>
               <button
                 type="button"
                 onClick={() => {
@@ -156,8 +190,45 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose, onEdi
 
         {/* Content Body */}
         <div className="p-6 space-y-6 max-h-[75vh] overflow-y-auto">
-          {/* Status Alert if not Available */}
-          {player.status !== 'Disponible' && (
+          {/* Status Alert (With detailed medical info and quick discharge if injured) */}
+          {player.status === 'Lesionado' ? (
+            <div className="p-4 rounded-xl bg-rose-950/40 border border-rose-800 text-rose-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+                <div>
+                  <div className="flex items-center gap-2">
+                    <p className="font-black text-sm text-white">🚫 JUGADOR LESIONADO (Baja Médica Activa)</p>
+                    <span className="text-[10px] bg-rose-500 text-white font-bold px-1.5 py-0.2 rounded">
+                      No Convocable
+                    </span>
+                  </div>
+                  <p className="text-rose-300 font-medium mt-0.5">
+                    {player.statusReason || (activeInjury ? `${activeInjury.injuryType} (${activeInjury.bodyZone})` : 'Lesión en tratamiento')}
+                  </p>
+                  {activeInjury?.diagnosis && (
+                    <p className="text-[11px] text-rose-300/80 mt-1 italic">
+                      "{activeInjury.diagnosis}" • {activeInjury.medicalStaff}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {activeInjury && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (confirm(`¿Dar Alta Médica a ${player.firstName} ${player.lastName}?\nEl jugador volverá a quedar Disponible para partidos y entrenamientos.`)) {
+                      dischargeInjury(activeInjury.id);
+                    }
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg shadow transition-colors cursor-pointer shrink-0 self-end sm:self-auto"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>Dar Alta Médica</span>
+                </button>
+              )}
+            </div>
+          ) : player.status !== 'Disponible' ? (
             <div className="p-3.5 rounded-xl bg-amber-950/40 border border-amber-800/80 text-amber-200 flex items-start gap-3 text-sm">
               <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
               <div>
@@ -165,7 +236,7 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose, onEdi
                 {player.statusReason && <p className="text-xs text-amber-300/90 mt-0.5">{player.statusReason}</p>}
               </div>
             </div>
-          )}
+          ) : null}
 
           {/* Personal Info & Physical Profile */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -324,8 +395,162 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose, onEdi
               </div>
             )}
           </div>
+
+          {/* MEDICAL & INJURY HISTORY SECTION ("que se reflejen en su ficha") */}
+          <div className="pt-2 border-t border-slate-800">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                <Activity className="w-3.5 h-3.5 text-rose-400" />
+                <span>Historial de Lesiones y Parte Médico ({playerInjuries.length})</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setInjuryToEdit(null);
+                  setIsInjuryFormOpen(true);
+                }}
+                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-rose-300 hover:text-white bg-rose-950/60 hover:bg-rose-900 border border-rose-800/80 rounded-lg transition-colors cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Registrar Lesión</span>
+              </button>
+            </div>
+
+            {playerInjuries.length === 0 ? (
+              <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 text-xs text-slate-500 text-center flex items-center justify-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                <span>Sin lesiones registradas en la temporada oficial actual. Futbolista en óptimas condiciones.</span>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {playerInjuries.map((inj) => (
+                  <div
+                    key={inj.id}
+                    className={`p-3.5 rounded-xl border text-xs space-y-2 transition-all ${
+                      inj.status === 'Lesionado' || inj.status === 'Activa'
+                        ? 'bg-rose-950/25 border-rose-900/80 text-rose-200'
+                        : inj.status === 'En Recuperación'
+                        ? 'bg-orange-950/25 border-orange-900/80 text-orange-200'
+                        : inj.status === 'En Reintegro Deportivo' || inj.status === 'En Reintegro'
+                        ? 'bg-amber-950/25 border-amber-900/80 text-amber-200'
+                        : 'bg-slate-950 border-slate-800 text-slate-300'
+                    }`}
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800/80 pb-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-black text-white text-sm">{inj.injuryType}</span>
+                        <span className={`text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-wider ${
+                          inj.status === 'Lesionado' || inj.status === 'Activa' ? 'bg-rose-600 text-white' :
+                          inj.status === 'En Recuperación' ? 'bg-orange-600 text-white' :
+                          inj.status === 'En Reintegro Deportivo' || inj.status === 'En Reintegro' ? 'bg-amber-500 text-slate-950 font-black' :
+                          'bg-emerald-600 text-white'
+                        }`}>
+                          {inj.status}
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-mono bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800">
+                          📅 {inj.dateInjured}
+                        </span>
+                        {inj.category && (
+                          <span className="text-[9px] text-amber-400 font-bold bg-amber-950/40 px-1.5 py-0.5 rounded border border-amber-800/60">
+                            Serie: {inj.category}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-auto">
+                        {inj.status !== 'Alta Médica' && (
+                          <button
+                            type="button"
+                            onClick={() => dischargeInjury(inj.id)}
+                            className="px-2.5 py-1 text-[11px] font-bold bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors cursor-pointer flex items-center gap-1"
+                            title="Otorgar alta médica oficial"
+                          >
+                            <CheckCircle2 className="w-3 h-3" />
+                            <span>Dar Alta</span>
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setInjuryToEdit(inj);
+                            setIsInjuryFormOpen(true);
+                          }}
+                          className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+                          title="Editar registro de lesión"
+                        >
+                          <Edit className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                      <div>
+                        <span className="text-slate-400 font-semibold block text-[10px] uppercase">Zona Anatómica:</span>
+                        <p className="text-white font-medium">📍 {inj.bodyZone}</p>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 font-semibold block text-[10px] uppercase">Profesional / Centro:</span>
+                        <p className="text-slate-200 font-medium">🏥 {inj.medicalStaffOrClinic || inj.medicalStaff || 'Kinesiología San Luis'}</p>
+                      </div>
+                    </div>
+
+                    {inj.description && (
+                      <div className="p-2 rounded-lg bg-slate-900/80 border border-slate-800 text-[11px]">
+                        <span className="text-slate-400 font-bold block text-[10px] uppercase">Descripción y Mecanismo:</span>
+                        <p className="text-slate-300 mt-0.5 leading-relaxed">{inj.description}</p>
+                      </div>
+                    )}
+
+                    <div className="p-2 rounded-lg bg-slate-900/80 border border-slate-800 text-[11px]">
+                      <span className="text-rose-400 font-bold block text-[10px] uppercase flex items-center gap-1">
+                        <Stethoscope className="w-3 h-3 text-rose-400" />
+                        <span>Diagnóstico Médico:</span>
+                      </span>
+                      <p className="text-slate-200 mt-0.5">{inj.diagnosis}</p>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-[11px] bg-slate-900/50 p-2 rounded-lg border border-slate-800/80">
+                      <div>
+                        <span className="text-slate-400 text-[10px] block">Retorno Estimado:</span>
+                        <strong className="text-amber-300 font-mono">{inj.expectedReturnDate || 'En evaluación'}</strong>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 text-[10px] block">Alta Médica Efectiva:</span>
+                        <strong className="text-emerald-400 font-mono">{inj.actualReturnDate || (inj.status === 'Alta Médica' ? 'Concedida' : 'Pendiente')}</strong>
+                      </div>
+                    </div>
+
+                    {(inj.evolutionNotes || inj.notes) && (
+                      <div className="text-[11px] text-slate-300 pt-1">
+                        <span className="text-amber-400 font-bold text-[10px] uppercase block">Evolución y Observaciones:</span>
+                        <p className="italic text-slate-300 mt-0.5">{inj.evolutionNotes || inj.notes}</p>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
+
+      {showFichaPdf && (
+        <PlayerFichaPdfModal
+          player={player}
+          onClose={() => setShowFichaPdf(false)}
+        />
+      )}
+
+      {isInjuryFormOpen && (
+        <InjuryFormModal
+          injuryToEdit={injuryToEdit}
+          defaultPlayerId={player.id}
+          onClose={() => {
+            setIsInjuryFormOpen(false);
+            setInjuryToEdit(null);
+          }}
+        />
+      )}
     </div>
   );
 };

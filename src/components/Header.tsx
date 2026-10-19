@@ -8,19 +8,23 @@ import {
   Plus, 
   Settings, 
   Shield, 
-  Download,
-  Upload,
-  Calendar,
-  LogOut,
-  UserCheck,
-  Cloud
+  Download, 
+  Upload, 
+  Calendar, 
+  LogOut, 
+  UserCheck, 
+  Cloud,
+  ClipboardList,
+  Activity,
+  AlertTriangle,
+  Dumbbell
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { getAllowedCategories } from '../types/auth';
 import { SanLuisLogo } from './Common/SanLuisLogo';
 import { FirebaseQuotaBadge } from './Common/FirebaseQuotaBadge';
 
-export type ActiveTab = 'matches' | 'players' | 'tactics' | 'stats' | 'planning';
+export type ActiveTab = 'matches' | 'citations' | 'players' | 'injuries' | 'wellness' | 'tactics' | 'stats' | 'planning';
 
 interface HeaderProps {
   activeTab: ActiveTab;
@@ -39,7 +43,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenSettings,
   onOpenUsers,
 }) => {
-  const { clubInfo, exportDatabaseJson, importDatabaseJson, matches, activeCategory, setActiveCategory, getCategoryStaff } = useFootball();
+  const { clubInfo, exportDatabaseJson, importDatabaseJson, matches, activeCategory, setActiveCategory, getCategoryStaff, injuries, citations } = useFootball();
   const { currentUser, logout } = useAuth();
 
   const isCoordinator = currentUser?.role === 'Coordinador General' || currentUser?.category === 'Todas';
@@ -113,7 +117,7 @@ export const Header: React.FC<HeaderProps> = ({
   const activeStaff = getCategoryStaff(activeCategory);
 
   return (
-    <header className="bg-slate-900 border-b border-slate-800 sticky top-0 z-30 shadow-xl">
+    <header className="bg-slate-900 border-b border-slate-800 sticky top-0 z-30 shadow-xl print:hidden">
       {/* Top Banner / Club Profile */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -324,8 +328,25 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
 
           <button
+            onClick={() => setActiveTab('citations')}
+            className={`flex items-center gap-2 px-3.5 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all whitespace-nowrap cursor-pointer ${
+              activeTab === 'citations'
+                ? 'bg-amber-400 text-slate-950 font-black shadow-md shadow-amber-950/40'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+            }`}
+          >
+            <ClipboardList className="w-4 h-4" />
+            <span>Citaciones de Partido</span>
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+              activeTab === 'citations' ? 'bg-amber-950 text-amber-200' : 'bg-slate-800 text-amber-400'
+            }`}>
+              {citations.filter((c) => activeCategory === 'all' || c.category === activeCategory).length}
+            </span>
+          </button>
+
+          <button
             onClick={() => setActiveTab('players')}
-            className={`flex items-center gap-2 px-3.5 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all whitespace-nowrap ${
+            className={`flex items-center gap-2 px-3.5 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all whitespace-nowrap cursor-pointer ${
               activeTab === 'players'
                 ? 'bg-emerald-600 text-white shadow-md shadow-emerald-900/30 font-bold'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
@@ -333,6 +354,44 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <Users className="w-4 h-4" />
             <span>Base de Datos Jugadores</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('injuries')}
+            className={`flex items-center gap-2 px-3.5 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all whitespace-nowrap cursor-pointer ${
+              activeTab === 'injuries'
+                ? 'bg-rose-600 text-white shadow-md shadow-rose-950/50 font-black'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+            }`}
+          >
+            <Activity className="w-4 h-4" />
+            <span>Lesionados</span>
+            {injuries.filter((i) => i.status === 'Activa' && (activeCategory === 'all' || i.category === activeCategory)).length > 0 ? (
+              <span className="text-[10px] px-1.5 py-0.2 rounded-full font-black bg-rose-500 text-white animate-pulse">
+                {injuries.filter((i) => i.status === 'Activa' && (activeCategory === 'all' || i.category === activeCategory)).length} bajas
+              </span>
+            ) : (
+              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-400">
+                0
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => setActiveTab('wellness')}
+            className={`flex items-center gap-2 px-3.5 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all whitespace-nowrap cursor-pointer ${
+              activeTab === 'wellness'
+                ? 'bg-amber-400 text-slate-950 font-black shadow-md shadow-amber-950/40'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+            }`}
+          >
+            <Dumbbell className="w-4 h-4" />
+            <span>Control Físico Semanal</span>
+            <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${
+              activeTab === 'wellness' ? 'bg-amber-950 text-amber-200' : 'bg-amber-500/20 text-amber-300 border border-amber-400/30'
+            }`}>
+              Check-in/out
+            </span>
           </button>
 
           <button

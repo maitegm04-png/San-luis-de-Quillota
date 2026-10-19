@@ -9,6 +9,9 @@ import { MatchFormModal } from './components/MatchSheets/MatchFormModal';
 import { TacticalBoard } from './components/Tactics/TacticalBoard';
 import { ClubStats } from './components/StatsDashboard/ClubStats';
 import { WeeklyPlanningDashboard } from './components/Planning/WeeklyPlanningDashboard';
+import { CitationsDashboard } from './components/Citations/CitationsDashboard';
+import { InjuriesDashboard } from './components/Injuries/InjuriesDashboard';
+import { WeeklyPhysicalDashboard } from './components/PhysicalArea/WeeklyPhysicalDashboard';
 import { ClubSettingsModal } from './components/ClubSettingsModal';
 import { LoginScreen } from './components/Auth/LoginScreen';
 import { UserManagementModal } from './components/Auth/UserManagementModal';
@@ -58,8 +61,20 @@ function FootballApp() {
           <MatchList onOpenNewMatch={() => setIsNewMatchOpen(true)} />
         )}
 
+        {activeTab === 'citations' && (
+          <CitationsDashboard />
+        )}
+
         {activeTab === 'players' && (
           <PlayerList onOpenNewPlayer={() => setIsNewPlayerOpen(true)} />
+        )}
+
+        {activeTab === 'injuries' && (
+          <InjuriesDashboard />
+        )}
+
+        {activeTab === 'wellness' && (
+          <WeeklyPhysicalDashboard />
         )}
 
         {activeTab === 'tactics' && (

@@ -117,6 +117,14 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({ player, onClick, onEdit 
           </div>
         </div>
 
+        {/* Injury Warning Banner on Card */}
+        {player.status === 'Lesionado' && player.statusReason && (
+          <div className="text-[10px] text-rose-300 font-medium bg-rose-950/40 border border-rose-900/60 rounded-lg px-2 py-1 mb-2.5 flex items-center gap-1.5 truncate">
+            <AlertCircle className="w-3 h-3 text-rose-400 shrink-0" />
+            <span className="truncate">{player.statusReason}</span>
+          </div>
+        )}
+
         {/* Player Mini Bio Details */}
         <div className="grid grid-cols-2 gap-2 text-xs text-slate-300 bg-slate-950/50 rounded-lg p-2.5 border border-slate-800/80 mb-3">
           <div>

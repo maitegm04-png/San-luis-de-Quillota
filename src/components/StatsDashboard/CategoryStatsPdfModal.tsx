@@ -15,7 +15,8 @@ import {
   FileText
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
-import html2canvas from 'html2canvas';
+import html2canvas from 'html2canvas-pro';
+import { sanitizeClonedDocColors } from '../../services/pdfColorSanitizer';
 
 interface CategoryStatsPdfModalProps {
   category: string;
@@ -102,7 +103,10 @@ export const CategoryStatsPdfModal: React.FC<CategoryStatsPdfModalProps> = ({
         scale: 2,
         useCORS: true,
         logging: false,
-        backgroundColor: '#ffffff'
+        backgroundColor: '#ffffff',
+        onclone: (clonedDoc) => {
+          sanitizeClonedDocColors(clonedDoc);
+        }
       });
 
       const imgData = canvas.toDataURL('image/png');

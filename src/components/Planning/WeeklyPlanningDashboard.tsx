@@ -91,6 +91,7 @@ export const WeeklyPlanningDashboard: React.FC = () => {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState<boolean>(false);
   const [printScope, setPrintScope] = useState<'current' | 'all'>('current');
+  const [viewMode, setViewMode] = useState<'edit' | 'clean'>('edit');
 
   const planId = `plan-${selectedCategory.replace(/\s+/g, '_')}-${selectedYear}-W${String(selectedWeek).padStart(2, '0')}`;
 
@@ -472,6 +473,21 @@ export const WeeklyPlanningDashboard: React.FC = () => {
               <span>Limpiar</span>
             </button>
 
+            {/* Alternar Vista Limpia / Modo Edición */}
+            <button
+              type="button"
+              onClick={() => setViewMode(viewMode === 'edit' ? 'clean' : 'edit')}
+              title="Alternar entre modo de edición de campos y vista limpia de lectura completa"
+              className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border transition-all cursor-pointer ${
+                viewMode === 'clean'
+                  ? 'bg-amber-400 text-slate-950 border-amber-300 shadow-md font-black scale-105'
+                  : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+              }`}
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-amber-400" />
+              <span>{viewMode === 'clean' ? 'Vista Limpia: Activa' : 'Vista Limpia'}</span>
+            </button>
+
             {/* Descargar PDF */}
             <button
               onClick={handleExportPdf}
@@ -625,23 +641,29 @@ export const WeeklyPlanningDashboard: React.FC = () => {
 
       {/* Printable Sheet View Container */}
       <div 
+        id="printable-planning-area"
         ref={printRef}
         className="bg-white text-slate-900 rounded-2xl shadow-2xl p-4 sm:p-6 overflow-x-auto font-sans border-2 border-slate-800"
       >
-        {/* Print Only Header */}
-        <div className="hidden print:flex items-center justify-between pb-3 border-b-2 border-amber-400 mb-4">
+        {/* Official Club Header (Visible in print and exported PDF) */}
+        <div id="planning-pdf-header" className="flex items-center justify-between pb-3 border-b-2 border-amber-400 mb-4 bg-white">
           <div className="flex items-center gap-3">
-            <SanLuisLogo className="w-12 h-14" />
+            <SanLuisLogo className="w-14 h-16 drop-shadow" />
             <div>
-              <h1 className="text-xl font-black uppercase tracking-tight">San Luis de Quillota</h1>
-              <p className="text-xs font-bold text-amber-600 uppercase">Fútbol Joven • Cantera Canaria</p>
+              <h1 className="text-xl font-black uppercase tracking-tight text-slate-950">San Luis de Quillota S.A.D.P.</h1>
+              <p className="text-xs font-bold text-amber-600 uppercase tracking-wide">Fútbol Formativo y Joven • Planificación Semanal Metodológica</p>
+              <p className="text-[11px] font-medium text-slate-600">
+                Categoría: <strong className="text-slate-950 uppercase">{selectedCategory}</strong> • Semana {selectedWeek} ({selectedYear}) • Cantera Canaria
+              </p>
             </div>
           </div>
           <div className="text-right">
-            <p className="text-sm font-black uppercase">
-              Planificación: {printScope === 'all' ? 'MICROCICLO SEMANAL COMPLETO (3 ÁREAS)' : activeArea === 'tecnica' ? 'ÁREA TÉCNICA' : activeArea === 'fisica' ? 'ÁREA FÍSICA' : 'ÁREA ARQUEROS'}
+            <div className="inline-block bg-amber-400 text-slate-950 font-black text-xs px-3 py-1 rounded border border-black uppercase shadow-xs">
+              {printScope === 'all' ? 'MICROCICLO COMPLETO (3 ÁREAS)' : activeArea === 'tecnica' ? 'ÁREA TÉCNICA' : activeArea === 'fisica' ? 'ÁREA FÍSICA' : 'ÁREA ARQUEROS'}
+            </div>
+            <p className="text-[11px] font-bold text-slate-600 mt-1">
+              Fechas: {weekDays[0].displayDate} al {weekDays[6].displayDate}
             </p>
-            <p className="text-xs font-bold text-slate-700">Categoría: {selectedCategory} • Semana {selectedWeek} ({selectedYear})</p>
           </div>
         </div>
 
@@ -652,16 +674,16 @@ export const WeeklyPlanningDashboard: React.FC = () => {
           <div className="space-y-0 mb-6">
             {/* Main Yellow Banner */}
             <div className="bg-[#FFFF00] text-black font-black text-center py-2 text-sm sm:text-base uppercase tracking-wider border-2 border-black">
-              AREA TECNICA • {selectedCategory} • SEMANA {selectedWeek}
+              AREA TECNICA • {selectedCategory} • SEMANA {selectedWeek} ({weekDays[0].displayDate} - {weekDays[6].displayDate})
             </div>
 
             {/* Days Table */}
             <div className="overflow-x-auto">
-              <table className="w-full border-collapse border-2 border-black text-xs min-w-[850px]">
+              <table className="w-full border-collapse border-2 border-black text-xs min-w-[1050px] table-fixed">
                 {/* Header row with days */}
                 <thead>
                   <tr className="bg-[#FFFF00] text-black font-black text-center border-b-2 border-black">
-                    <th className="w-28 p-2 border-r-2 border-black">CAMPO</th>
+                    <th className="w-28 sm:w-32 p-2 border-r-2 border-black">CAMPO</th>
                     {weekDays.map((wd) => (
                       <th key={wd.key} className="p-2 border-r border-black last:border-r-0 uppercase">
                         {wd.label}
@@ -677,7 +699,7 @@ export const WeeklyPlanningDashboard: React.FC = () => {
                       FECHA
                     </td>
                     {weekDays.map((wd) => (
-                      <td key={wd.key} className="p-2 text-center border-r border-black last:border-r-0 font-bold text-slate-800">
+                      <td key={wd.key} className="p-2 text-center border-r border-black last:border-r-0 font-black text-slate-900">
                         {wd.displayDate}
                       </td>
                     ))}
@@ -692,17 +714,19 @@ export const WeeklyPlanningDashboard: React.FC = () => {
                       const dayPlan = plan.tecnica[wd.key];
                       return (
                         <td key={wd.key} className="p-1.5 border-r border-black last:border-r-0 align-top">
-                          <input
-                            type="text"
-                            value={dayPlan.sesionTitulo}
-                            onChange={(e) => updateTechnicalField(wd.key, 'sesionTitulo', e.target.value)}
-                            placeholder={wd.key === 'domingo' ? 'LIBRE' : 'Tema de sesión...'}
-                            className={`w-full p-1.5 text-xs font-bold rounded border ${
-                              dayPlan.isFreeDay || dayPlan.sesionTitulo === 'LIBRE'
-                                ? 'bg-slate-200 text-slate-700 border-slate-400 text-center font-black'
-                                : 'bg-white text-slate-900 border-slate-300'
-                            }`}
-                          />
+                          {viewMode === 'clean' ? (
+                            <div className="p-1.5 text-xs font-black text-slate-900 text-center uppercase min-h-[32px] flex items-center justify-center bg-slate-50 rounded border border-slate-200">
+                              {dayPlan.sesionTitulo || <span className="text-slate-400 font-normal">Sin definir</span>}
+                            </div>
+                          ) : (
+                            <input
+                              type="text"
+                              value={dayPlan.sesionTitulo}
+                              onChange={(e) => updateTechnicalField(wd.key, 'sesionTitulo', e.target.value)}
+                              placeholder="Tema o foco de sesión..."
+                              className="w-full p-1.5 text-xs font-bold rounded border bg-white text-slate-900 border-slate-300 focus:outline-amber-500"
+                            />
+                          )}
                         </td>
                       );
                     })}
@@ -718,15 +742,16 @@ export const WeeklyPlanningDashboard: React.FC = () => {
                         </td>
                         {weekDays.map((wd) => {
                           const currentBlock = plan.tecnica[wd.key]?.bloques[blockIdx] || { estructura: '', modulo: '' };
-                          const isFree = plan.tecnica[wd.key]?.isFreeDay;
                           const normalizedEstructura = TECNICA_ESTRUCTURA_OPTIONS.find(
                             (opt) => opt.toLowerCase() === (currentBlock.estructura || '').toLowerCase()
                           ) || currentBlock.estructura;
 
                           return (
-                            <td key={wd.key} className="p-1 border-r border-black last:border-r-0">
-                              {isFree ? (
-                                <div className="text-center text-slate-400 font-bold py-1">-</div>
+                            <td key={wd.key} className="p-1.5 border-r border-black last:border-r-0 align-middle">
+                              {viewMode === 'clean' ? (
+                                <div className="p-1 text-[11px] font-black text-center text-slate-900 bg-amber-100 rounded border border-amber-300">
+                                  {normalizedEstructura || <span className="text-slate-400 font-normal">-</span>}
+                                </div>
                               ) : (
                                 <select
                                   value={normalizedEstructura}
@@ -750,18 +775,23 @@ export const WeeklyPlanningDashboard: React.FC = () => {
                         </td>
                         {weekDays.map((wd) => {
                           const currentBlock = plan.tecnica[wd.key]?.bloques[blockIdx] || { estructura: '', modulo: '' };
-                          const isFree = plan.tecnica[wd.key]?.isFreeDay;
                           return (
-                            <td key={wd.key} className="p-1 border-r border-black last:border-r-0">
-                              {isFree ? (
-                                <div className="text-center text-slate-400 py-3 font-semibold text-xs">Descanso</div>
+                            <td key={wd.key} className="p-1.5 border-r border-black last:border-r-0 align-top">
+                              {viewMode === 'clean' ? (
+                                <div className="p-2 text-[11px] font-medium leading-relaxed whitespace-pre-wrap break-words text-slate-900 bg-slate-50/80 min-h-[50px] rounded border border-slate-200">
+                                  {currentBlock.modulo || <span className="text-slate-400 italic">Sin consignas registradas</span>}
+                                </div>
                               ) : (
                                 <textarea
                                   rows={2}
                                   value={currentBlock.modulo}
-                                  onChange={(e) => updateTechnicalBlock(wd.key, blockIdx, 'modulo', e.target.value)}
+                                  onChange={(e) => {
+                                    updateTechnicalBlock(wd.key, blockIdx, 'modulo', e.target.value);
+                                    e.target.style.height = 'auto';
+                                    e.target.style.height = Math.max(50, e.target.scrollHeight) + 'px';
+                                  }}
                                   placeholder="Detalle de tarea, consignas y objetivos tácticos..."
-                                  className="w-full p-1.5 text-[11px] rounded border border-slate-200 bg-slate-50/50 text-slate-800 resize-none focus:outline-amber-500"
+                                  className="w-full p-1.5 text-[11px] font-medium leading-relaxed rounded border border-slate-200 bg-slate-50/50 text-slate-800 min-h-[50px] focus:outline-amber-500"
                                 />
                               )}
                             </td>
@@ -783,14 +813,14 @@ export const WeeklyPlanningDashboard: React.FC = () => {
           <div className="space-y-0 mb-6">
             {/* Main Yellow Banner */}
             <div className="bg-[#FFFF00] text-black font-black text-center py-2 text-sm sm:text-base uppercase tracking-wider border-2 border-black">
-              AREA FISICA • {selectedCategory} • SEMANA {selectedWeek}
+              AREA FISICA • {selectedCategory} • SEMANA {selectedWeek} ({weekDays[0].displayDate} - {weekDays[6].displayDate})
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full border-collapse border-2 border-black text-xs min-w-[850px]">
+              <table className="w-full border-collapse border-2 border-black text-xs min-w-[1050px] table-fixed">
                 <thead>
                   <tr className="bg-[#FFFF00] text-black font-black text-center border-b-2 border-black">
-                    <th className="w-28 p-2 border-r-2 border-black">CAMPO</th>
+                    <th className="w-28 sm:w-32 p-2 border-r-2 border-black">CAMPO</th>
                     {weekDays.map((wd) => (
                       <th key={wd.key} className="p-2 border-r border-black last:border-r-0 uppercase">
                         {wd.label}
@@ -806,7 +836,7 @@ export const WeeklyPlanningDashboard: React.FC = () => {
                       FECHA
                     </td>
                     {weekDays.map((wd) => (
-                      <td key={wd.key} className="p-2 text-center border-r border-black last:border-r-0 font-bold text-slate-800">
+                      <td key={wd.key} className="p-2 text-center border-r border-black last:border-r-0 font-black text-slate-900">
                         {wd.displayDate}
                       </td>
                     ))}
@@ -820,16 +850,22 @@ export const WeeklyPlanningDashboard: React.FC = () => {
                     {weekDays.map((wd) => {
                       const dayPlan = plan.fisica[wd.key];
                       return (
-                        <td key={wd.key} className="p-1.5 border-r border-black last:border-r-0">
-                          <select
-                            value={dayPlan.cargaDelDia}
-                            onChange={(e) => updatePhysicalDay(wd.key, 'cargaDelDia', e.target.value)}
-                            className="w-full p-1.5 text-[11px] font-black rounded border border-slate-300 bg-white text-slate-900 focus:outline-amber-500"
-                          >
-                            {CARGA_OPTIONS.map((opt) => (
-                              <option key={opt} value={opt}>{opt}</option>
-                            ))}
-                          </select>
+                        <td key={wd.key} className="p-1.5 border-r border-black last:border-r-0 align-middle">
+                          {viewMode === 'clean' ? (
+                            <div className="p-1.5 text-[11px] font-black text-center text-slate-900 bg-amber-100 rounded border border-amber-300">
+                              {dayPlan.cargaDelDia || '-'}
+                            </div>
+                          ) : (
+                            <select
+                              value={dayPlan.cargaDelDia}
+                              onChange={(e) => updatePhysicalDay(wd.key, 'cargaDelDia', e.target.value)}
+                              className="w-full p-1.5 text-[11px] font-black rounded border border-slate-300 bg-white text-slate-900 focus:outline-amber-500"
+                            >
+                              {CARGA_OPTIONS.map((opt) => (
+                                <option key={opt} value={opt}>{opt}</option>
+                              ))}
+                            </select>
+                          )}
                         </td>
                       );
                     })}
@@ -844,22 +880,39 @@ export const WeeklyPlanningDashboard: React.FC = () => {
                       const dayPlan = plan.fisica[wd.key];
                       return (
                         <td key={wd.key} className="p-1.5 border-r border-black last:border-r-0 align-top space-y-1">
-                          <select
-                            value={dayPlan.preSesion.tipo}
-                            onChange={(e) => updatePhysicalPre(wd.key, 'tipo', e.target.value)}
-                            className="w-full p-1 text-[11px] font-bold rounded border border-slate-300 bg-white text-slate-900 focus:outline-amber-500"
-                          >
-                            {PRE_SESION_FISICA_OPTIONS.map((opt) => (
-                              <option key={opt} value={opt}>{opt}</option>
-                            ))}
-                          </select>
-                          <textarea
-                            rows={2}
-                            value={dayPlan.preSesion.descripcion}
-                            onChange={(e) => updatePhysicalPre(wd.key, 'descripcion', e.target.value)}
-                            placeholder="Ejercicios preventivos y activación..."
-                            className="w-full p-1 text-[10px] rounded border border-slate-200 bg-slate-50 text-slate-800 resize-none focus:outline-amber-500"
-                          />
+                          {viewMode === 'clean' ? (
+                            <div className="space-y-1 p-1">
+                              <div className="font-bold text-[10px] text-amber-950 bg-amber-100 px-1 py-0.5 rounded border border-amber-300 text-center">
+                                {dayPlan.preSesion.tipo || '-'}
+                              </div>
+                              <div className="text-[10px] font-medium leading-relaxed whitespace-pre-wrap break-words text-slate-900 bg-slate-50 p-1.5 rounded border border-slate-200 min-h-[38px]">
+                                {dayPlan.preSesion.descripcion || <span className="text-slate-400 italic">Sin detalle</span>}
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <select
+                                value={dayPlan.preSesion.tipo}
+                                onChange={(e) => updatePhysicalPre(wd.key, 'tipo', e.target.value)}
+                                className="w-full p-1 text-[11px] font-bold rounded border border-slate-300 bg-white text-slate-900 focus:outline-amber-500"
+                              >
+                                {PRE_SESION_FISICA_OPTIONS.map((opt) => (
+                                  <option key={opt} value={opt}>{opt}</option>
+                                ))}
+                              </select>
+                              <textarea
+                                rows={2}
+                                value={dayPlan.preSesion.descripcion}
+                                onChange={(e) => {
+                                  updatePhysicalPre(wd.key, 'descripcion', e.target.value);
+                                  e.target.style.height = 'auto';
+                                  e.target.style.height = Math.max(45, e.target.scrollHeight) + 'px';
+                                }}
+                                placeholder="Ejercicios preventivos y activación..."
+                                className="w-full p-1 text-[10px] font-medium leading-relaxed rounded border border-slate-200 bg-slate-50 text-slate-800 min-h-[45px] focus:outline-amber-500"
+                              />
+                            </>
+                          )}
                         </td>
                       );
                     })}
@@ -876,45 +929,80 @@ export const WeeklyPlanningDashboard: React.FC = () => {
                       const b2 = dayPlan.sesion.bloques[1] || { tipo: '', descripcion: '' };
                       return (
                         <td key={wd.key} className="p-1.5 border-r border-black last:border-r-0 align-top space-y-1.5">
-                          {/* Block 1 */}
-                          <div className="space-y-1">
-                            <select
-                              value={b1.tipo}
-                              onChange={(e) => updatePhysicalBlock(wd.key, 0, 'tipo', e.target.value)}
-                              className="w-full p-1 text-[11px] font-bold rounded border border-slate-300 bg-white text-slate-900 focus:outline-amber-500"
-                            >
-                              {SESION_FISICA_OPTIONS.map((opt) => (
-                                <option key={opt} value={opt}>{opt}</option>
-                              ))}
-                            </select>
-                            <textarea
-                              rows={3}
-                              value={b1.descripcion}
-                              onChange={(e) => updatePhysicalBlock(wd.key, 0, 'descripcion', e.target.value)}
-                              placeholder="Volumen, series, repeticiones, metros..."
-                              className="w-full p-1 text-[10px] rounded border border-slate-200 bg-slate-50 text-slate-800 resize-none focus:outline-amber-500"
-                            />
-                          </div>
+                          {viewMode === 'clean' ? (
+                            <div className="space-y-1.5 p-1">
+                              {/* Block 1 */}
+                              <div className="space-y-1">
+                                <div className="font-bold text-[10px] text-slate-900 bg-yellow-100 px-1 py-0.5 rounded border border-yellow-300 text-center">
+                                  {b1.tipo || '-'}
+                                </div>
+                                <div className="text-[10px] font-medium leading-relaxed whitespace-pre-wrap break-words text-slate-900 bg-slate-50 p-1.5 rounded border border-slate-200 min-h-[42px]">
+                                  {b1.descripcion || <span className="text-slate-400 italic">Sin tareas</span>}
+                                </div>
+                              </div>
+                              {/* Block 2 */}
+                              {(b2.tipo || b2.descripcion) && (
+                                <div className="pt-1 border-t border-slate-200 space-y-1">
+                                  <div className="font-bold text-[9px] text-slate-800 bg-slate-100 px-1 py-0.5 rounded border border-slate-200 text-center">
+                                    {b2.tipo || '-'}
+                                  </div>
+                                  <div className="text-[10px] font-medium leading-relaxed whitespace-pre-wrap break-words text-slate-900 bg-slate-50 p-1.5 rounded border border-slate-200">
+                                    {b2.descripcion}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <>
+                              {/* Block 1 */}
+                              <div className="space-y-1">
+                                <select
+                                  value={b1.tipo}
+                                  onChange={(e) => updatePhysicalBlock(wd.key, 0, 'tipo', e.target.value)}
+                                  className="w-full p-1 text-[11px] font-bold rounded border border-slate-300 bg-white text-slate-900 focus:outline-amber-500"
+                                >
+                                  {SESION_FISICA_OPTIONS.map((opt) => (
+                                    <option key={opt} value={opt}>{opt}</option>
+                                  ))}
+                                </select>
+                                <textarea
+                                  rows={2}
+                                  value={b1.descripcion}
+                                  onChange={(e) => {
+                                    updatePhysicalBlock(wd.key, 0, 'descripcion', e.target.value);
+                                    e.target.style.height = 'auto';
+                                    e.target.style.height = Math.max(50, e.target.scrollHeight) + 'px';
+                                  }}
+                                  placeholder="Volumen, series, repeticiones, metros..."
+                                  className="w-full p-1 text-[10px] font-medium leading-relaxed rounded border border-slate-200 bg-slate-50 text-slate-800 min-h-[50px] focus:outline-amber-500"
+                                />
+                              </div>
 
-                          {/* Block 2 (Optional sub-exercise) */}
-                          <div className="pt-1 border-t border-slate-200 space-y-1">
-                            <select
-                              value={b2.tipo}
-                              onChange={(e) => updatePhysicalBlock(wd.key, 1, 'tipo', e.target.value)}
-                              className="w-full p-1 text-[10px] font-semibold rounded border border-slate-300 bg-white text-slate-800 focus:outline-amber-500"
-                            >
-                              {SESION_FISICA_OPTIONS.map((opt) => (
-                                <option key={opt} value={opt}>{opt}</option>
-                              ))}
-                            </select>
-                            <textarea
-                              rows={2}
-                              value={b2.descripcion}
-                              onChange={(e) => updatePhysicalBlock(wd.key, 1, 'descripcion', e.target.value)}
-                              placeholder="Trabajo específico o complementario..."
-                              className="w-full p-1 text-[10px] rounded border border-slate-200 bg-slate-50 text-slate-800 resize-none focus:outline-amber-500"
-                            />
-                          </div>
+                              {/* Block 2 (Optional sub-exercise) */}
+                              <div className="pt-1 border-t border-slate-200 space-y-1">
+                                <select
+                                  value={b2.tipo}
+                                  onChange={(e) => updatePhysicalBlock(wd.key, 1, 'tipo', e.target.value)}
+                                  className="w-full p-1 text-[10px] font-semibold rounded border border-slate-300 bg-white text-slate-800 focus:outline-amber-500"
+                                >
+                                  {SESION_FISICA_OPTIONS.map((opt) => (
+                                    <option key={opt} value={opt}>{opt}</option>
+                                  ))}
+                                </select>
+                                <textarea
+                                  rows={2}
+                                  value={b2.descripcion}
+                                  onChange={(e) => {
+                                    updatePhysicalBlock(wd.key, 1, 'descripcion', e.target.value);
+                                    e.target.style.height = 'auto';
+                                    e.target.style.height = Math.max(45, e.target.scrollHeight) + 'px';
+                                  }}
+                                  placeholder="Trabajo específico o complementario..."
+                                  className="w-full p-1 text-[10px] font-medium leading-relaxed rounded border border-slate-200 bg-slate-50 text-slate-800 min-h-[45px] focus:outline-amber-500"
+                                />
+                              </div>
+                            </>
+                          )}
                         </td>
                       );
                     })}
@@ -929,22 +1017,39 @@ export const WeeklyPlanningDashboard: React.FC = () => {
                       const dayPlan = plan.fisica[wd.key];
                       return (
                         <td key={wd.key} className="p-1.5 border-r border-black last:border-r-0 align-top space-y-1">
-                          <select
-                            value={dayPlan.complementario.tipo}
-                            onChange={(e) => updatePhysicalComp(wd.key, 'tipo', e.target.value)}
-                            className="w-full p-1 text-[11px] font-bold rounded border border-slate-300 bg-white text-slate-900 focus:outline-amber-500"
-                          >
-                            {COMPLEMENTARIO_FISICA_OPTIONS.map((opt) => (
-                              <option key={opt} value={opt}>{opt}</option>
-                            ))}
-                          </select>
-                          <textarea
-                            rows={2}
-                            value={dayPlan.complementario.descripcion}
-                            onChange={(e) => updatePhysicalComp(wd.key, 'descripcion', e.target.value)}
-                            placeholder="Fuerza, crioterapia o flexibilidad..."
-                            className="w-full p-1 text-[10px] rounded border border-slate-200 bg-slate-50 text-slate-800 resize-none focus:outline-amber-500"
-                          />
+                          {viewMode === 'clean' ? (
+                            <div className="space-y-1 p-1">
+                              <div className="font-bold text-[10px] text-amber-950 bg-amber-100 px-1 py-0.5 rounded border border-amber-300 text-center">
+                                {dayPlan.complementario.tipo || '-'}
+                              </div>
+                              <div className="text-[10px] font-medium leading-relaxed whitespace-pre-wrap break-words text-slate-900 bg-slate-50 p-1.5 rounded border border-slate-200 min-h-[36px]">
+                                {dayPlan.complementario.descripcion || <span className="text-slate-400 italic">Sin detalle</span>}
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <select
+                                value={dayPlan.complementario.tipo}
+                                onChange={(e) => updatePhysicalComp(wd.key, 'tipo', e.target.value)}
+                                className="w-full p-1 text-[11px] font-bold rounded border border-slate-300 bg-white text-slate-900 focus:outline-amber-500"
+                              >
+                                {COMPLEMENTARIO_FISICA_OPTIONS.map((opt) => (
+                                  <option key={opt} value={opt}>{opt}</option>
+                                ))}
+                              </select>
+                              <textarea
+                                rows={2}
+                                value={dayPlan.complementario.descripcion}
+                                onChange={(e) => {
+                                  updatePhysicalComp(wd.key, 'descripcion', e.target.value);
+                                  e.target.style.height = 'auto';
+                                  e.target.style.height = Math.max(45, e.target.scrollHeight) + 'px';
+                                }}
+                                placeholder="Fuerza, crioterapia o flexibilidad..."
+                                className="w-full p-1 text-[10px] font-medium leading-relaxed rounded border border-slate-200 bg-slate-50 text-slate-800 min-h-[45px] focus:outline-amber-500"
+                              />
+                            </>
+                          )}
                         </td>
                       );
                     })}
@@ -962,14 +1067,14 @@ export const WeeklyPlanningDashboard: React.FC = () => {
           <div className="space-y-0">
             {/* Main Yellow Banner */}
             <div className="bg-[#FFFF00] text-black font-black text-center py-2 text-sm sm:text-base uppercase tracking-wider border-2 border-black">
-              AREA ARQUEROS • {selectedCategory} • SEMANA {selectedWeek}
+              AREA ARQUEROS • {selectedCategory} • SEMANA {selectedWeek} ({weekDays[0].displayDate} - {weekDays[6].displayDate})
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full border-collapse border-2 border-black text-xs min-w-[850px]">
+              <table className="w-full border-collapse border-2 border-black text-xs min-w-[1050px] table-fixed">
                 <thead>
                   <tr className="bg-[#FFFF00] text-black font-black text-center border-b-2 border-black">
-                    <th className="w-28 p-2 border-r-2 border-black">CAMPO</th>
+                    <th className="w-28 sm:w-32 p-2 border-r-2 border-black">CAMPO</th>
                     {weekDays.map((wd) => (
                       <th key={wd.key} className="p-2 border-r border-black last:border-r-0 uppercase">
                         {wd.label}
@@ -985,7 +1090,7 @@ export const WeeklyPlanningDashboard: React.FC = () => {
                       FECHA
                     </td>
                     {weekDays.map((wd) => (
-                      <td key={wd.key} className="p-2 text-center border-r border-black last:border-r-0 font-bold text-slate-800">
+                      <td key={wd.key} className="p-2 text-center border-r border-black last:border-r-0 font-black text-slate-900">
                         {wd.displayDate}
                       </td>
                     ))}
@@ -999,16 +1104,22 @@ export const WeeklyPlanningDashboard: React.FC = () => {
                     {weekDays.map((wd) => {
                       const dayPlan = plan.arqueros[wd.key];
                       return (
-                        <td key={wd.key} className="p-1.5 border-r border-black last:border-r-0">
-                          <select
-                            value={dayPlan.objetivoDelDia}
-                            onChange={(e) => updateGoalkeeperDay(wd.key, 'objetivoDelDia', e.target.value)}
-                            className="w-full p-1.5 text-[11px] font-black rounded border border-slate-300 bg-white text-slate-900 focus:outline-amber-500"
-                          >
-                            {ARQUEROS_OBJETIVOS.map((opt) => (
-                              <option key={opt} value={opt}>{opt}</option>
-                            ))}
-                          </select>
+                        <td key={wd.key} className="p-1.5 border-r border-black last:border-r-0 align-middle">
+                          {viewMode === 'clean' ? (
+                            <div className="p-1.5 text-[11px] font-black text-center text-slate-900 bg-amber-100 rounded border border-amber-300">
+                              {dayPlan.objetivoDelDia || '-'}
+                            </div>
+                          ) : (
+                            <select
+                              value={dayPlan.objetivoDelDia}
+                              onChange={(e) => updateGoalkeeperDay(wd.key, 'objetivoDelDia', e.target.value)}
+                              className="w-full p-1.5 text-[11px] font-black rounded border border-slate-300 bg-white text-slate-900 focus:outline-amber-500"
+                            >
+                              {ARQUEROS_OBJETIVOS.map((opt) => (
+                                <option key={opt} value={opt}>{opt}</option>
+                              ))}
+                            </select>
+                          )}
                         </td>
                       );
                     })}
@@ -1021,11 +1132,17 @@ export const WeeklyPlanningDashboard: React.FC = () => {
                     </td>
                     {weekDays.map((wd) => {
                       const dayPlan = plan.arqueros[wd.key];
-                      const isFree = dayPlan.objetivoDelDia === 'LIBRE';
                       return (
                         <td key={wd.key} className="p-1.5 border-r border-black last:border-r-0 align-top space-y-1">
-                          {isFree ? (
-                            <div className="text-center font-bold text-slate-400 py-3">LIBRE</div>
+                          {viewMode === 'clean' ? (
+                            <div className="space-y-1 p-1">
+                              <div className="font-bold text-[10px] text-amber-950 bg-amber-100 px-1 py-0.5 rounded border border-amber-300 text-center">
+                                {dayPlan.preSesion.tipo || '-'}
+                              </div>
+                              <div className="text-[10px] font-medium leading-relaxed whitespace-pre-wrap break-words text-slate-900 bg-slate-50 p-1.5 rounded border border-slate-200 min-h-[38px]">
+                                {dayPlan.preSesion.descripcion || <span className="text-slate-400 italic">Sin detalle</span>}
+                              </div>
+                            </div>
                           ) : (
                             <>
                               <select
@@ -1040,9 +1157,13 @@ export const WeeklyPlanningDashboard: React.FC = () => {
                               <textarea
                                 rows={2}
                                 value={dayPlan.preSesion.descripcion}
-                                onChange={(e) => updateGoalkeeperPre(wd.key, 'descripcion', e.target.value)}
+                                onChange={(e) => {
+                                  updateGoalkeeperPre(wd.key, 'descripcion', e.target.value);
+                                  e.target.style.height = 'auto';
+                                  e.target.style.height = Math.max(45, e.target.scrollHeight) + 'px';
+                                }}
                                 placeholder="Movilidad, coordinación y agarres..."
-                                className="w-full p-1 text-[10px] rounded border border-slate-200 bg-slate-50 text-slate-800 resize-none focus:outline-amber-500"
+                                className="w-full p-1 text-[10px] font-medium leading-relaxed rounded border border-slate-200 bg-slate-50 text-slate-800 min-h-[45px] focus:outline-amber-500"
                               />
                             </>
                           )}
@@ -1060,11 +1181,31 @@ export const WeeklyPlanningDashboard: React.FC = () => {
                       const dayPlan = plan.arqueros[wd.key];
                       const b1 = dayPlan.sesion.bloques[0] || { tipo: '', descripcion: '' };
                       const b2 = dayPlan.sesion.bloques[1] || { tipo: '', descripcion: '' };
-                      const isFree = dayPlan.objetivoDelDia === 'LIBRE';
                       return (
                         <td key={wd.key} className="p-1.5 border-r border-black last:border-r-0 align-top space-y-1.5">
-                          {isFree ? (
-                            <div className="text-center font-bold text-slate-400 py-8 text-sm">DESCANSO / LIBRE</div>
+                          {viewMode === 'clean' ? (
+                            <div className="space-y-1.5 p-1">
+                              {/* Block 1 */}
+                              <div className="space-y-1">
+                                <div className="font-bold text-[10px] text-slate-900 bg-yellow-100 px-1 py-0.5 rounded border border-yellow-300 text-center">
+                                  {b1.tipo || '-'}
+                                </div>
+                                <div className="text-[10px] font-medium leading-relaxed whitespace-pre-wrap break-words text-slate-900 bg-slate-50 p-1.5 rounded border border-slate-200 min-h-[42px]">
+                                  {b1.descripcion || <span className="text-slate-400 italic">Sin tareas</span>}
+                                </div>
+                              </div>
+                              {/* Block 2 */}
+                              {(b2.tipo || b2.descripcion) && (
+                                <div className="pt-1 border-t border-slate-200 space-y-1">
+                                  <div className="font-bold text-[9px] text-slate-800 bg-slate-100 px-1 py-0.5 rounded border border-slate-200 text-center">
+                                    {b2.tipo || '-'}
+                                  </div>
+                                  <div className="text-[10px] font-medium leading-relaxed whitespace-pre-wrap break-words text-slate-900 bg-slate-50 p-1.5 rounded border border-slate-200">
+                                    {b2.descripcion}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
                           ) : (
                             <>
                               <div className="space-y-1">
@@ -1078,11 +1219,15 @@ export const WeeklyPlanningDashboard: React.FC = () => {
                                   ))}
                                 </select>
                                 <textarea
-                                  rows={3}
+                                  rows={2}
                                   value={b1.descripcion}
-                                  onChange={(e) => updateGoalkeeperBlock(wd.key, 0, 'descripcion', e.target.value)}
+                                  onChange={(e) => {
+                                    updateGoalkeeperBlock(wd.key, 0, 'descripcion', e.target.value);
+                                    e.target.style.height = 'auto';
+                                    e.target.style.height = Math.max(50, e.target.scrollHeight) + 'px';
+                                  }}
                                   placeholder="Repeticiones, orientación corporal y toma de decisiones..."
-                                  className="w-full p-1 text-[10px] rounded border border-slate-200 bg-slate-50 text-slate-800 resize-none focus:outline-amber-500"
+                                  className="w-full p-1 text-[10px] font-medium leading-relaxed rounded border border-slate-200 bg-slate-50 text-slate-800 min-h-[50px] focus:outline-amber-500"
                                 />
                               </div>
 
@@ -1099,9 +1244,13 @@ export const WeeklyPlanningDashboard: React.FC = () => {
                                 <textarea
                                   rows={2}
                                   value={b2.descripcion}
-                                  onChange={(e) => updateGoalkeeperBlock(wd.key, 1, 'descripcion', e.target.value)}
+                                  onChange={(e) => {
+                                    updateGoalkeeperBlock(wd.key, 1, 'descripcion', e.target.value);
+                                    e.target.style.height = 'auto';
+                                    e.target.style.height = Math.max(45, e.target.scrollHeight) + 'px';
+                                  }}
                                   placeholder="Juego de pies o integración grupal..."
-                                  className="w-full p-1 text-[10px] rounded border border-slate-200 bg-slate-50 text-slate-800 resize-none focus:outline-amber-500"
+                                  className="w-full p-1 text-[10px] font-medium leading-relaxed rounded border border-slate-200 bg-slate-50 text-slate-800 min-h-[45px] focus:outline-amber-500"
                                 />
                               </div>
                             </>
@@ -1118,11 +1267,17 @@ export const WeeklyPlanningDashboard: React.FC = () => {
                     </td>
                     {weekDays.map((wd) => {
                       const dayPlan = plan.arqueros[wd.key];
-                      const isFree = dayPlan.objetivoDelDia === 'LIBRE';
                       return (
                         <td key={wd.key} className="p-1.5 border-r border-black last:border-r-0 align-top space-y-1">
-                          {isFree ? (
-                            <div className="text-center font-bold text-slate-400 py-3">-</div>
+                          {viewMode === 'clean' ? (
+                            <div className="space-y-1 p-1">
+                              <div className="font-bold text-[10px] text-amber-950 bg-amber-100 px-1 py-0.5 rounded border border-amber-300 text-center">
+                                {dayPlan.complementario.tipo || '-'}
+                              </div>
+                              <div className="text-[10px] font-medium leading-relaxed whitespace-pre-wrap break-words text-slate-900 bg-slate-50 p-1.5 rounded border border-slate-200 min-h-[36px]">
+                                {dayPlan.complementario.descripcion || <span className="text-slate-400 italic">Sin detalle</span>}
+                              </div>
+                            </div>
                           ) : (
                             <>
                               <input
@@ -1135,9 +1290,13 @@ export const WeeklyPlanningDashboard: React.FC = () => {
                               <textarea
                                 rows={2}
                                 value={dayPlan.complementario.descripcion}
-                                onChange={(e) => updateGoalkeeperComp(wd.key, 'descripcion', e.target.value)}
+                                onChange={(e) => {
+                                  updateGoalkeeperComp(wd.key, 'descripcion', e.target.value);
+                                  e.target.style.height = 'auto';
+                                  e.target.style.height = Math.max(45, e.target.scrollHeight) + 'px';
+                                }}
                                 placeholder="Trabajo específico complementario..."
-                                className="w-full p-1 text-[10px] rounded border border-slate-200 bg-slate-50 text-slate-800 resize-none focus:outline-amber-500"
+                                className="w-full p-1 text-[10px] font-medium leading-relaxed rounded border border-slate-200 bg-slate-50 text-slate-800 min-h-[45px] focus:outline-amber-500"
                               />
                             </>
                           )}

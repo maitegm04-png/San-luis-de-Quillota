@@ -177,20 +177,32 @@ export const MatchList: React.FC<MatchListProps> = ({ onOpenNewMatch }) => {
                         : 'bg-slate-900/70 border-slate-800 hover:border-slate-700 hover:bg-slate-850'
                     }`}
                   >
-                    <div className="flex items-center justify-between gap-2 mb-1.5">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                        {m.competition} • {m.matchDay}
-                      </span>
-                      <span className={`text-[9px] font-bold uppercase px-2 py-0.2 rounded-full ${
-                        m.status === 'live'
-                          ? 'bg-rose-950 text-rose-400 border border-rose-800 animate-pulse'
-                          : m.status === 'finished'
-                          ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
-                          : 'bg-blue-950 text-blue-400 border border-blue-800'
-                      }`}>
-                        {m.status === 'live' ? 'En Directo' : m.status === 'finished' ? 'Finalizado' : 'Programado'}
-                      </span>
-                    </div>
+                    {(() => {
+                      const injuryCount = (m.injuryIncidents?.length || 0) + m.events.filter((e) => e.type === 'injury' && !m.injuryIncidents?.some((i) => i.playerId === e.playerId)).length;
+                      return (
+                        <div className="flex items-center justify-between gap-2 mb-1.5">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                              {m.competition} • {m.matchDay}
+                            </span>
+                            {injuryCount > 0 && (
+                              <span className="text-[9px] font-black bg-rose-950 text-rose-300 px-1.5 py-0.2 rounded border border-rose-800">
+                                🚑 {injuryCount} Lesionado{injuryCount > 1 ? 's' : ''}
+                              </span>
+                            )}
+                          </div>
+                          <span className={`text-[9px] font-bold uppercase px-2 py-0.2 rounded-full ${
+                            m.status === 'live'
+                              ? 'bg-rose-950 text-rose-400 border border-rose-800 animate-pulse'
+                              : m.status === 'finished'
+                              ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                              : 'bg-blue-950 text-blue-400 border border-blue-800'
+                          }`}>
+                            {m.status === 'live' ? 'En Directo' : m.status === 'finished' ? 'Finalizado' : 'Programado'}
+                          </span>
+                        </div>
+                      );
+                    })()}
 
                     <div className="flex items-center justify-between">
                       <div className="font-bold text-white text-sm">

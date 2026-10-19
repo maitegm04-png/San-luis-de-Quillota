@@ -38,6 +38,39 @@ export interface PlayerStats {
   avgRating: number;
 }
 
+export type InjuryStatus = 
+  | 'Lesionado' 
+  | 'En Recuperación' 
+  | 'En Reintegro Deportivo' 
+  | 'Alta Médica'
+  | 'Activa' 
+  | 'En Reintegro';
+
+export interface PlayerInjury {
+  id: string;
+  playerId: string;
+  playerName?: string;
+  playerSquadNumber?: number;
+  category: string;
+  injuryType: string; // ej: "Desgarro isquiotibial", "Esguince de tobillo", "Rotura meniscal", "Sobrecarga muscular"
+  bodyZone: string; // ej: "Muslo posterior derecho", "Rodilla izquierda", "Tobillo derecho"
+  description?: string; // Descripción de la lesión y qué le pasó (mecanismo del trauma, dolor, cómo ocurrió)
+  diagnosis: string; // Diagnóstico médico (si está disponible)
+  medicalStaff?: string; // Profesional responsable o centro médico
+  medicalStaffOrClinic?: string; // Centro médico o profesional a cargo
+  severity: 'Leve' | 'Moderada' | 'Grave' | 'Muy Grave';
+  dateInjured: string; // YYYY-MM-DD (Fecha de la lesión)
+  expectedReturnDate?: string; // YYYY-MM-DD (Fecha estimada de regreso)
+  actualReturnDate?: string; // YYYY-MM-DD (Fecha efectiva de alta médica)
+  status: InjuryStatus; // Estado actual: lesionado, en recuperación, en reintegro deportivo o alta médica
+  treatment?: string; // Tratamiento kinésico o médico indicado
+  notes?: string; // Observaciones y evolución de la recuperación
+  evolutionNotes?: string; // Historial y notas de evolución clínica
+  season?: string;
+  matchId?: string; // Si la lesión ocurrió durante un partido
+  createdAt?: string;
+}
+
 export interface Player {
   id: string;
   squadNumber: number;
@@ -61,6 +94,40 @@ export interface Player {
   photoUrl?: string; // Foto del jugador (URL o imagen base64 comprimida)
   attributes: PlayerAttributes;
   stats: PlayerStats;
+  injuries?: PlayerInjury[];
+}
+
+export interface CitationPlayerEntry {
+  playerId: string;
+  squadNumber: number;
+  name: string;
+  displayName: string; // Apellido o nombre corto en mayúsculas para la chapa amarilla (ej: "CHARPENTIER", "SILVA", "L. TAPIA")
+  photoUrl?: string; // Foto desde la base de datos del jugador
+  primaryPosition?: Position;
+  category?: string;
+  avatarColor?: string;
+  roleType?: 'Titular' | 'Suplente' | 'Reserva';
+}
+
+export interface MatchCitation {
+  id: string;
+  category: string; // Sub 11, Sub 12, Sub 13, Sub 14, Sub 15, Sub 16, Sub 18, Sub 20
+  title: string;
+  matchDay?: string; // ej: "Fecha 6"
+  competition?: MatchCompetition;
+  opponent: string;
+  opponentLogoUrl?: string; // Logo del rival (SVG, PNG o preestablecido)
+  date: string; // YYYY-MM-DD
+  dateFormatted?: string; // ej: "SABADO 17 OCTUBRE"
+  matchTime?: string; // HH:mm
+  meetingTime: string; // HH:mm (ej: "07:30 HRS")
+  venue: string; // ej: "COMPLEJO SAN LUIS"
+  pitch?: string; // ej: "Cancha N°1 Principal"
+  isHome?: boolean; // true si es local, false si es visita
+  requiredItems: string[]; // Solo: ['Llevar cédula de identidad', 'Canilleras', 'Zapatos de fútbol']
+  coachStaff?: CoachStaff;
+  players: CitationPlayerEntry[];
+  createdAt: string;
 }
 
 export type TacticalFormation = '4-3-3' | '4-4-2' | '4-2-3-1' | '3-5-2' | '3-4-3' | '5-3-2' | '4-1-4-1';
@@ -81,10 +148,25 @@ export type MatchEventType =
   | 'yellow_card'
   | 'red_card'
   | 'sub_in_out'
+  | 'injury'
   | 'penalty_scored'
   | 'penalty_missed'
   | 'own_goal'
   | 'note';
+
+export interface MatchInjuryIncident {
+  id: string;
+  playerId: string;
+  playerName: string;
+  playerSquadNumber?: number;
+  minute: number;
+  description: string; // Qué le pasó al jugador (ej: "Choque con rival, salió con dolor en tobillo")
+  injuryType?: string; // Tipo de lesión diagnosticada o sospechada
+  bodyZone?: string; // Zona del cuerpo afectada
+  severity?: 'Leve' | 'Moderada' | 'Grave' | 'Muy Grave';
+  recordedInMedicalModule?: boolean; // Si ya fue registrada en el módulo médico de lesionados
+  medicalInjuryId?: string; // ID de la lesión en el módulo médico
+}
 
 export interface MatchEvent {
   id: string;
@@ -95,6 +177,7 @@ export interface MatchEvent {
   assistPlayerId?: string;
   opponentPlayerName?: string;
   detail?: string;
+  injuryIncident?: MatchInjuryIncident;
 }
 
 export interface LineupPlayer {
@@ -154,6 +237,114 @@ export interface CollectiveMatchStats {
   recoveriesAway?: number;
 }
 
+export interface MatchPhysicalPlayerEntry {
+  number: number;
+  playerId: string;
+  firstName: string;
+  lastName: string;
+  role: 'TITULAR' | 'SUPLENTE';
+  minutes: number;
+  pse: number; // 0 to 10 (Escala Borg)
+  status: 'OK' | '-' | 'Fatiga' | 'Molestia' | 'Sobrecarga' | 'Lesión';
+}
+
+export interface MatchPhysicalReport {
+  fieldCondition: 'Césped' | 'Sintético' | 'Mixto' | 'Tierra';
+  tacticalSystem?: string;
+  venueLocation?: string;
+  players: MatchPhysicalPlayerEntry[];
+  averagePseTitulares?: number;
+  averagePseSuplentes?: number;
+  averagePseTotal?: number;
+  notes?: string;
+  recordedBy?: string; // Nombre del PF responsable
+}
+
+export interface MatchGpsPlayerEntry {
+  playerId: string;
+  playerName: string;
+  minutes: number;
+  totalDistanceMeters: number;
+  distancePerMinute: number;
+  highSpeedDistance: number; // +21 km/h
+  sprintDistance: number;
+  sprintsCount: number; // +25 km/h
+  maxSpeed: number; // km/h
+  pse?: number;
+}
+
+export interface MatchGpsAverages {
+  avgTotalDistance: number;
+  avgDistancePerMin: number;
+  avgHighSpeedDistance: number;
+  avgSprintDistance: number;
+  avgSprints: number;
+  avgMaxSpeed: number;
+}
+
+export interface MatchGpsTopRecords {
+  topTotalDistance: { playerName: string; value: number };
+  topHighSpeedDistance: { playerName: string; value: number };
+  topMaxSpeed: { playerName: string; value: number };
+  topSprints: { playerName: string; value: number };
+  topSprintDistance: { playerName: string; value: number };
+}
+
+export interface MatchGpsReport {
+  matchName: string;
+  date: string;
+  category: string; // Exclusivo Sub 20
+  stadium: string;
+  players: MatchGpsPlayerEntry[];
+  averages: MatchGpsAverages;
+  topRecords: MatchGpsTopRecords;
+  notes?: string;
+}
+
+export type DayOfWeek = 'Lunes' | 'Martes' | 'Miércoles' | 'Jueves' | 'Viernes' | 'Sábado' | 'Domingo';
+
+export type DayScheduleType = 'Entrenamiento' | 'Partido' | 'Libre' | 'Gimnasio' | 'Recuperación';
+
+export interface WeeklyCheckInEntry {
+  id: string;
+  playerId: string;
+  playerName: string;
+  category: string; // Sub 15, Sub 16, Sub 18, Sub 20
+  date: string; // YYYY-MM-DD
+  dayOfWeek: DayOfWeek;
+  sleepScore: number; // Sueño: Nota 1 a 7 (no en horas)
+  stressLevel: number; // Estrés: Nota 1 a 7
+  fatigue: number; // Fatiga: Nota 1 a 7
+  muscleSoreness: number; // Dolor Muscular: Nota 1 a 7
+  energyLevel: number; // Nivel de energía: Nota 1 a 7
+  painArea?: string; // Indica zona de molestia Pre Entrenamiento
+  wellnessScore: number; // Puntuación de bienestar calculada (5 a 35)
+  trafficLight: 'green' | 'yellow' | 'red';
+  readyToTrain: boolean;
+  notes?: string;
+  sleepHours?: number; // compatibilidad previa
+  sleepQuality?: number; // compatibilidad previa
+  mood?: number; // compatibilidad previa
+  createdAt: string;
+}
+
+export interface WeeklyCheckOutEntry {
+  id: string;
+  playerId: string;
+  playerName: string;
+  category: string; // Sub 15, Sub 16, Sub 18, Sub 20
+  date: string; // YYYY-MM-DD
+  dayOfWeek: DayOfWeek;
+  sessionType: 'Entrenamiento' | 'Fuerza / Gimnasio' | 'Táctico' | 'Partido' | 'Recuperación';
+  durationMinutes: number; // duración de la sesión en minutos
+  pse: number; // 0-10 (Percepción Subjetiva del Esfuerzo)
+  sessionRpeLoad: number; // PSE x Duración = Carga U.A. (Unidades Arbitrarias)
+  painPostSession?: string;
+  status: 'OK' | 'Fatiga Normal' | 'Sobrecarga' | 'Atención Kinesiológica';
+  notes?: string;
+  createdAt: string;
+}
+
 export interface MatchSheet {
   id: string;
   title: string;
@@ -192,13 +383,22 @@ export interface MatchSheet {
   
   // Stats & Ratings
   playerRatings: Record<string, PlayerMatchRating>;
-  matchStats: CollectiveMatchStats;
+  matchStats?: CollectiveMatchStats;
   mvpPlayerId?: string;
 
   // Coach tactical notes
   tacticalNotesPre?: string;
   tacticalNotesHalf?: string;
   tacticalNotesPost?: string;
+
+  // Medical & Injury incidents during match
+  injuryIncidents?: MatchInjuryIncident[];
+
+  // Physical Area (Sub 14 a Sub 20)
+  physicalReport?: MatchPhysicalReport;
+
+  // GPS Metrics (Exclusively Sub 20)
+  gpsReport?: MatchGpsReport;
 }
 
 export interface ClubInfo {

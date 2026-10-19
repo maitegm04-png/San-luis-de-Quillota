@@ -1,5 +1,6 @@
 import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
+import html2canvas from 'html2canvas-pro';
+import { sanitizeClonedDocColors } from './pdfColorSanitizer';
 
 export interface PdfExportOptions {
   category: string;
@@ -16,14 +17,74 @@ export async function exportPlanningToPdf(
   options: PdfExportOptions
 ): Promise<boolean> {
   try {
-    // Clona o ajusta estilos temporalmente para garantizar renderizado nítido
     const canvas = await html2canvas(element, {
       scale: 2, // 2x para nitidez de texto e imágenes
       useCORS: true,
       allowTaint: true,
       backgroundColor: '#ffffff',
       logging: false,
-      windowWidth: 1280,
+      windowWidth: 1350,
+      onclone: (clonedDoc) => {
+        // Sanitizar colores modernos (oklch, oklab) para compatibilidad total
+        sanitizeClonedDocColors(clonedDoc);
+
+        // Asegurar que el membrete oficial del club sea visible en el PDF
+        const header = clonedDoc.getElementById('planning-pdf-header');
+        if (header) {
+          header.style.display = 'flex';
+          header.style.visibility = 'visible';
+        }
+
+        // Reemplazar textareas con divs para que se renderice TODO el texto escrito de forma limpia y completa
+        const textareas = clonedDoc.querySelectorAll('textarea');
+        textareas.forEach((ta) => {
+          const div = clonedDoc.createElement('div');
+          div.textContent = ta.value || '';
+          div.style.whiteSpace = 'pre-wrap';
+          div.style.wordBreak = 'break-word';
+          div.style.fontSize = '10px';
+          div.style.lineHeight = '1.35';
+          div.style.padding = '4px 6px';
+          div.style.minHeight = '32px';
+          div.style.color = '#0f172a';
+          div.style.backgroundColor = '#f8fafc';
+          div.style.border = '1px solid #e2e8f0';
+          div.style.borderRadius = '4px';
+          div.style.fontFamily = 'inherit';
+          ta.parentNode?.replaceChild(div, ta);
+        });
+
+        // Reemplazar selects con etiquetas legibles completas
+        const selects = clonedDoc.querySelectorAll('select');
+        selects.forEach((sel) => {
+          const selectedText = sel.options[sel.selectedIndex]?.text || sel.value || '';
+          const div = clonedDoc.createElement('div');
+          div.textContent = selectedText === '- Seleccionar Estructura -' ? '' : selectedText;
+          div.style.fontSize = '10px';
+          div.style.fontWeight = '700';
+          div.style.color = '#0f172a';
+          div.style.padding = '2px 5px';
+          div.style.backgroundColor = '#fef08a';
+          div.style.border = '1px solid #cbd5e1';
+          div.style.borderRadius = '4px';
+          div.style.marginBottom = '3px';
+          div.style.fontFamily = 'inherit';
+          sel.parentNode?.replaceChild(div, sel);
+        });
+
+        // Reemplazar inputs de texto con divs limpios
+        const inputs = clonedDoc.querySelectorAll<HTMLInputElement>('input[type="text"]');
+        inputs.forEach((inp) => {
+          const div = clonedDoc.createElement('div');
+          div.textContent = inp.value || '';
+          div.style.fontSize = '11px';
+          div.style.fontWeight = '800';
+          div.style.color = '#0f172a';
+          div.style.padding = '3px 5px';
+          div.style.textAlign = inp.style.textAlign || 'left';
+          inp.parentNode?.replaceChild(div, inp);
+        });
+      }
     });
 
     const imgData = canvas.toDataURL('image/png');

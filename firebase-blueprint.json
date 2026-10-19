@@ -151,6 +151,22 @@
     "/weekly_plans/{planId}": {
       "schema": "WeeklyPlan",
       "description": "Planificaciones semanales por categoría y semana del año"
+    },
+    "/injuries/{injuryId}": {
+      "schema": "PlayerInjury",
+      "description": "Registro de lesiones médicas del club"
+    },
+    "/citations/{citationId}": {
+      "schema": "MatchCitation",
+      "description": "Planillas de citación oficial de partidos"
+    },
+    "/checkins/{checkinId}": {
+      "schema": "WeeklyCheckInEntry",
+      "description": "Registros diarios de Check-in y bienestar de futbolistas"
+    },
+    "/checkouts/{checkoutId}": {
+      "schema": "WeeklyCheckOutEntry",
+      "description": "Registros diarios de Check-out, PSE y carga de entrenamiento"
     }
   }
 }

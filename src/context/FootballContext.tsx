@@ -1,6 +1,31 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { ClubInfo, CoachStaff, MatchEvent, MatchSheet, Player, Position, TacticalFormation } from '../types/football';
-import { FORMATIONS_SLOTS, INITIAL_CLUB_INFO, INITIAL_MATCHES, INITIAL_PLAYERS, INITIAL_STAFF_BY_CATEGORY } from '../data/mockData';
+import { 
+  ClubInfo, 
+  CoachStaff, 
+  MatchCitation, 
+  MatchEvent, 
+  MatchInjuryIncident, 
+  MatchSheet, 
+  Player, 
+  PlayerInjury, 
+  Position, 
+  TacticalFormation,
+  MatchPhysicalReport,
+  MatchGpsReport,
+  WeeklyCheckInEntry,
+  WeeklyCheckOutEntry
+} from '../types/football';
+import { 
+  FORMATIONS_SLOTS, 
+  INITIAL_CITATIONS, 
+  INITIAL_CLUB_INFO, 
+  INITIAL_INJURIES, 
+  INITIAL_MATCHES, 
+  INITIAL_PLAYERS, 
+  INITIAL_STAFF_BY_CATEGORY,
+  INITIAL_WEEKLY_CHECKINS,
+  INITIAL_WEEKLY_CHECKOUTS
+} from '../data/mockData';
 import { collection, doc, setDoc, deleteDoc, onSnapshot, writeBatch } from 'firebase/firestore';
 import { db } from '../firebase';
 import { canPerformFirebaseWrite, recordQuotaOperation } from '../services/firebaseQuotaGuard';
@@ -48,6 +73,40 @@ interface FootballContextType {
   updateMatchScore: (matchId: string, homeScore: number, awayScore: number) => void;
   finishMatch: (matchId: string) => void;
 
+  // Medical & Injuries Management
+  injuries: PlayerInjury[];
+  addInjury: (injury: Omit<PlayerInjury, 'id' | 'createdAt'>) => string;
+  updateInjury: (id: string, injury: Partial<PlayerInjury>) => void;
+  deleteInjury: (id: string) => void;
+  dischargeInjury: (id: string, returnDate?: string) => void;
+  isPlayerInjured: (playerId: string) => boolean;
+  recordMatchInjury: (matchId: string, incident: Omit<MatchInjuryIncident, 'id'>, createMedicalRecord?: boolean) => void;
+  removeMatchInjury: (matchId: string, incidentId: string) => void;
+
+  // Match Citations / Convocatorias de Partido
+  citations: MatchCitation[];
+  addCitation: (citation: Omit<MatchCitation, 'id' | 'createdAt'>) => string;
+  updateCitation: (id: string, citation: Partial<MatchCitation>) => void;
+  deleteCitation: (id: string) => void;
+  getCitationById: (id: string) => MatchCitation | undefined;
+
+  // Physical Area (Sub-14 a Sub-20) & GPS Sub-20
+  updateMatchPhysicalReport: (matchId: string, report: MatchPhysicalReport) => void;
+  updateMatchGpsReport: (matchId: string, report: MatchGpsReport) => void;
+
+  // Weekly Physical Control (Sub-16 a Sub-20): Check-in & Check-out
+  weeklyCheckIns: WeeklyCheckInEntry[];
+  addWeeklyCheckIn: (entry: Omit<WeeklyCheckInEntry, 'id' | 'createdAt'>) => string;
+  addWeeklyCheckInsBatch: (entries: Omit<WeeklyCheckInEntry, 'id' | 'createdAt'>[]) => void;
+  updateWeeklyCheckIn: (id: string, entry: Partial<WeeklyCheckInEntry>) => void;
+  deleteWeeklyCheckIn: (id: string) => void;
+
+  weeklyCheckOuts: WeeklyCheckOutEntry[];
+  addWeeklyCheckOut: (entry: Omit<WeeklyCheckOutEntry, 'id' | 'createdAt'>) => string;
+  addWeeklyCheckOutsBatch: (entries: Omit<WeeklyCheckOutEntry, 'id' | 'createdAt'>[]) => void;
+  updateWeeklyCheckOut: (id: string, entry: Partial<WeeklyCheckOutEntry>) => void;
+  deleteWeeklyCheckOut: (id: string) => void;
+
   // Data management
   resetToDefaultData: () => void;
   exportDatabaseJson: () => void;
@@ -61,12 +120,20 @@ const STORAGE_KEY_MATCHES = 'san_luis_matches_v2';
 const STORAGE_KEY_CLUB = 'san_luis_club_v2';
 const STORAGE_KEY_ACTIVE_CATEGORY = 'san_luis_active_category_v2';
 const STORAGE_KEY_STAFF_BY_CAT = 'san_luis_staff_by_cat_v2';
+const STORAGE_KEY_INJURIES = 'san_luis_injuries_v2';
+const STORAGE_KEY_CITATIONS = 'san_luis_citations_v2';
+const STORAGE_KEY_CHECKINS = 'san_luis_checkins_v1';
+const STORAGE_KEY_CHECKOUTS = 'san_luis_checkouts_v1';
 
 export const FootballProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [players, setPlayers] = useState<Player[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_PLAYERS);
-      return saved ? JSON.parse(saved) : INITIAL_PLAYERS;
+      if (!saved) return INITIAL_PLAYERS;
+      const parsed: Player[] = JSON.parse(saved);
+      const existingIds = new Set(parsed.map((p) => p.id));
+      const missing = INITIAL_PLAYERS.filter((p) => !existingIds.has(p.id));
+      return missing.length > 0 ? [...parsed, ...missing] : parsed;
     } catch {
       return INITIAL_PLAYERS;
     }
@@ -78,6 +145,42 @@ export const FootballProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       return saved ? JSON.parse(saved) : INITIAL_MATCHES;
     } catch {
       return INITIAL_MATCHES;
+    }
+  });
+
+  const [injuries, setInjuries] = useState<PlayerInjury[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_INJURIES);
+      return saved ? JSON.parse(saved) : INITIAL_INJURIES;
+    } catch {
+      return INITIAL_INJURIES;
+    }
+  });
+
+  const [citations, setCitations] = useState<MatchCitation[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_CITATIONS);
+      return saved ? JSON.parse(saved) : INITIAL_CITATIONS;
+    } catch {
+      return INITIAL_CITATIONS;
+    }
+  });
+
+  const [weeklyCheckIns, setWeeklyCheckIns] = useState<WeeklyCheckInEntry[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_CHECKINS);
+      return saved ? JSON.parse(saved) : INITIAL_WEEKLY_CHECKINS;
+    } catch {
+      return INITIAL_WEEKLY_CHECKINS;
+    }
+  });
+
+  const [weeklyCheckOuts, setWeeklyCheckOuts] = useState<WeeklyCheckOutEntry[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_CHECKOUTS);
+      return saved ? JSON.parse(saved) : INITIAL_WEEKLY_CHECKOUTS;
+    } catch {
+      return INITIAL_WEEKLY_CHECKOUTS;
     }
   });
 
@@ -194,6 +297,82 @@ export const FootballProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return () => unsub();
   }, []);
 
+  // Real-time Firestore sync for injuries
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'injuries'), (snapshot) => {
+      if (!snapshot.empty) {
+        const cloudInjuries: PlayerInjury[] = [];
+        snapshot.forEach((d) => {
+          cloudInjuries.push(d.data() as PlayerInjury);
+        });
+        setInjuries(cloudInjuries);
+      } else {
+        const batch = writeBatch(db);
+        INITIAL_INJURIES.forEach((inj) => {
+          batch.set(doc(db, 'injuries', inj.id), inj);
+        });
+        batch.commit().catch(console.error);
+      }
+    }, (error) => {
+      console.warn('Firestore injuries sync fallback', error);
+    });
+    return () => unsub();
+  }, []);
+
+  // Real-time Firestore sync for match citations / convocatorias
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'citations'), (snapshot) => {
+      if (!snapshot.empty) {
+        const cloudCitations: MatchCitation[] = [];
+        snapshot.forEach((d) => {
+          cloudCitations.push(d.data() as MatchCitation);
+        });
+        setCitations(cloudCitations);
+      } else {
+        const batch = writeBatch(db);
+        INITIAL_CITATIONS.forEach((cit) => {
+          batch.set(doc(db, 'citations', cit.id), cit);
+        });
+        batch.commit().catch(console.error);
+      }
+    }, (error) => {
+      console.warn('Firestore citations sync fallback', error);
+    });
+    return () => unsub();
+  }, []);
+
+  // Real-time Firestore sync for daily check-ins
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'checkins'), (snapshot) => {
+      if (!snapshot.empty) {
+        const cloudCheckIns: WeeklyCheckInEntry[] = [];
+        snapshot.forEach((d) => {
+          cloudCheckIns.push(d.data() as WeeklyCheckInEntry);
+        });
+        setWeeklyCheckIns(cloudCheckIns);
+      }
+    }, (error) => {
+      console.warn('Firestore checkins sync fallback', error);
+    });
+    return () => unsub();
+  }, []);
+
+  // Real-time Firestore sync for daily check-outs
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'checkouts'), (snapshot) => {
+      if (!snapshot.empty) {
+        const cloudCheckOuts: WeeklyCheckOutEntry[] = [];
+        snapshot.forEach((d) => {
+          cloudCheckOuts.push(d.data() as WeeklyCheckOutEntry);
+        });
+        setWeeklyCheckOuts(cloudCheckOuts);
+      }
+    }, (error) => {
+      console.warn('Firestore checkouts sync fallback', error);
+    });
+    return () => unsub();
+  }, []);
+
   // Sync to local storage as instant backup
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_PLAYERS, JSON.stringify(players));
@@ -214,6 +393,22 @@ export const FootballProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_STAFF_BY_CAT, JSON.stringify(categoryStaff));
   }, [categoryStaff]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY_INJURIES, JSON.stringify(injuries));
+  }, [injuries]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY_CITATIONS, JSON.stringify(citations));
+  }, [citations]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY_CHECKINS, JSON.stringify(weeklyCheckIns));
+  }, [weeklyCheckIns]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY_CHECKOUTS, JSON.stringify(weeklyCheckOuts));
+  }, [weeklyCheckOuts]);
 
   const setActiveCategory = (cat: string) => {
     setActiveCategoryState(cat);
@@ -275,6 +470,24 @@ export const FootballProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setPlayers((prev) =>
       prev.map((p) => (p.id === id ? { ...p, ...updatedFields } : p))
     );
+
+    // Keep injuries in sync if category or name changes
+    if (updatedFields.category || updatedFields.firstName || updatedFields.lastName || updatedFields.nickname) {
+      setInjuries((prevInj) =>
+        prevInj.map((inj) => {
+          if (inj.playerId === id) {
+            return {
+              ...inj,
+              category: updatedFields.category || inj.category,
+              playerName: updatedFields.nickname || 
+                (updatedFields.firstName && updatedFields.lastName ? `${updatedFields.firstName} ${updatedFields.lastName}` : inj.playerName)
+            };
+          }
+          return inj;
+        })
+      );
+    }
+
     if (canPerformFirebaseWrite()) {
       setDoc(doc(db, 'players', id), updatedFields, { merge: true })
         .then(() => recordQuotaOperation('write', 1))
@@ -394,6 +607,13 @@ export const FootballProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const targetMatch = matches.find((m) => m.id === matchId);
     if (!targetMatch) return;
 
+    // Block injured players from being fielded
+    const candidatePlayer = players.find((p) => p.id === playerId);
+    if (candidatePlayer?.status === 'Lesionado') {
+      alert(`No es posible alinear a ${candidatePlayer.firstName} ${candidatePlayer.lastName}: El futbolista figura con baja médica activa (Lesionado).`);
+      return;
+    }
+
     // Remove player from substitutes or reserves if present
     const updatedSubs = targetMatch.substitutes.filter((id) => id !== playerId);
     const updatedReserves = targetMatch.reserves.filter((id) => id !== playerId);
@@ -458,6 +678,13 @@ export const FootballProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       newSubs = targetMatch.substitutes.filter((id) => id !== playerId);
       newReserves = Array.from(new Set([...targetMatch.reserves, playerId]));
     } else {
+      // Block injured players from being put on the bench
+      const candidatePlayer = players.find((p) => p.id === playerId);
+      if (candidatePlayer?.status === 'Lesionado') {
+        alert(`No es posible convocar al banquillo a ${candidatePlayer.firstName} ${candidatePlayer.lastName}: El futbolista figura con baja médica activa (Lesionado).`);
+        return;
+      }
+
       // If was starting, remove from starting
       const newStarting = targetMatch.startingEleven.filter((s) => s.playerId !== playerId);
       newSubs = Array.from(new Set([...targetMatch.substitutes, playerId]));
@@ -684,16 +911,355 @@ export const FootballProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     updateMatch(matchId, { status: 'finished' });
   };
 
+  // Helper to check if player has active injury (Lesionado, En Recuperación o Activa)
+  const isPlayerInjured = (playerId: string): boolean => {
+    const p = players.find((pl) => pl.id === playerId);
+    if (p?.status === 'Lesionado') return true;
+    return injuries.some((inj) => 
+      inj.playerId === playerId && 
+      (inj.status === 'Lesionado' || inj.status === 'En Recuperación' || inj.status === 'Activa')
+    );
+  };
+
+  const addInjury = (injuryData: Omit<PlayerInjury, 'id' | 'createdAt'>): string => {
+    const newId = `inj-${Date.now()}`;
+    const targetPlayer = players.find((p) => p.id === injuryData.playerId);
+    const newInjury: PlayerInjury = {
+      ...injuryData,
+      id: newId,
+      playerName: targetPlayer ? (targetPlayer.nickname || `${targetPlayer.firstName} ${targetPlayer.lastName}`) : injuryData.playerName,
+      playerSquadNumber: targetPlayer?.squadNumber,
+      category: targetPlayer?.category || injuryData.category,
+      createdAt: new Date().toISOString(),
+    };
+
+    setInjuries((prev) => [newInjury, ...prev]);
+    setDoc(doc(db, 'injuries', newId), newInjury).catch(console.error);
+
+    const isActive = injuryData.status === 'Lesionado' || injuryData.status === 'En Recuperación' || injuryData.status === 'Activa';
+    const isReintegro = injuryData.status === 'En Reintegro Deportivo' || injuryData.status === 'En Reintegro';
+
+    if (targetPlayer) {
+      // Automatic chronological history in player profile
+      const currentInjuries = targetPlayer.injuries || [];
+      const updatedInjuries = [newInjury, ...currentInjuries.filter((i) => i.id !== newId)].sort(
+        (a, b) => new Date(b.dateInjured).getTime() - new Date(a.dateInjured).getTime()
+      );
+
+      updatePlayer(targetPlayer.id, {
+        injuries: updatedInjuries,
+        status: isActive ? 'Lesionado' : isReintegro ? 'Duda' : targetPlayer.status,
+        statusReason: isActive 
+          ? `${injuryData.injuryType} (${injuryData.bodyZone})` 
+          : isReintegro 
+          ? `${injuryData.injuryType} (En Reintegro Deportivo)` 
+          : targetPlayer.statusReason,
+      });
+    }
+
+    return newId;
+  };
+
+  const updateInjury = (id: string, partial: Partial<PlayerInjury>) => {
+    const existing = injuries.find((i) => i.id === id);
+    if (!existing) return;
+
+    const updated = { ...existing, ...partial };
+    setInjuries((prev) => prev.map((i) => (i.id === id ? updated : i)));
+    setDoc(doc(db, 'injuries', id), updated, { merge: true }).catch(console.error);
+
+    const playerId = updated.playerId;
+    const targetPlayer = players.find((p) => p.id === playerId);
+
+    const isNowAlta = partial.status === 'Alta Médica';
+    const isNowActive = partial.status === 'Lesionado' || partial.status === 'En Recuperación' || partial.status === 'Activa';
+    const isNowReintegro = partial.status === 'En Reintegro Deportivo' || partial.status === 'En Reintegro';
+
+    if (targetPlayer) {
+      const currentInjuries = targetPlayer.injuries || [];
+      const updatedInjuries = currentInjuries.map((i) => (i.id === id ? updated : i)).sort(
+        (a, b) => new Date(b.dateInjured).getTime() - new Date(a.dateInjured).getTime()
+      );
+
+      if (isNowAlta) {
+        const hasOtherActive = injuries.some((i) => 
+          i.id !== id && i.playerId === playerId && 
+          (i.status === 'Lesionado' || i.status === 'En Recuperación' || i.status === 'Activa')
+        );
+        updatePlayer(playerId, {
+          injuries: updatedInjuries,
+          status: hasOtherActive ? 'Lesionado' : 'Disponible',
+          statusReason: hasOtherActive ? targetPlayer.statusReason : undefined,
+        });
+      } else if (isNowActive) {
+        updatePlayer(playerId, {
+          injuries: updatedInjuries,
+          status: 'Lesionado',
+          statusReason: `${updated.injuryType} (${updated.bodyZone})`,
+        });
+      } else if (isNowReintegro) {
+        updatePlayer(playerId, {
+          injuries: updatedInjuries,
+          status: 'Duda',
+          statusReason: `${updated.injuryType} (En Reintegro Deportivo)`,
+        });
+      } else {
+        updatePlayer(playerId, { injuries: updatedInjuries });
+      }
+    }
+  };
+
+  const dischargeInjury = (id: string, returnDate?: string) => {
+    const today = returnDate || new Date().toISOString().slice(0, 10);
+    updateInjury(id, {
+      status: 'Alta Médica',
+      actualReturnDate: today,
+      notes: `Alta médica otorgada el ${today}. Apto para competición oficial.`
+    });
+  };
+
+  const deleteInjury = (id: string) => {
+    const target = injuries.find((i) => i.id === id);
+    setInjuries((prev) => prev.filter((i) => i.id !== id));
+    deleteDoc(doc(db, 'injuries', id)).catch(console.error);
+
+    if (target) {
+      const targetPlayer = players.find((p) => p.id === target.playerId);
+      const otherActive = injuries.some((i) => 
+        i.id !== id && i.playerId === target.playerId && 
+        (i.status === 'Lesionado' || i.status === 'En Recuperación' || i.status === 'Activa')
+      );
+      if (targetPlayer) {
+        const remainingHistory = (targetPlayer.injuries || []).filter((i) => i.id !== id);
+        updatePlayer(target.playerId, {
+          injuries: remainingHistory,
+          status: otherActive ? 'Lesionado' : 'Disponible',
+          statusReason: otherActive ? targetPlayer.statusReason : undefined,
+        });
+      }
+    }
+  };
+
+  // Record an injury incident directly during a match
+  const recordMatchInjury = (
+    matchId: string, 
+    incidentData: Omit<MatchInjuryIncident, 'id'>, 
+    createMedicalRecord: boolean = true
+  ) => {
+    const targetMatch = matches.find((m) => m.id === matchId);
+    if (!targetMatch) return;
+
+    const incidentId = `minj-${Date.now()}`;
+    const newIncident: MatchInjuryIncident = {
+      ...incidentData,
+      id: incidentId,
+    };
+
+    let medicalInjuryId: string | undefined = undefined;
+
+    if (createMedicalRecord) {
+      medicalInjuryId = addInjury({
+        playerId: incidentData.playerId,
+        playerName: incidentData.playerName,
+        playerSquadNumber: incidentData.playerSquadNumber,
+        category: targetMatch.category,
+        injuryType: incidentData.injuryType || 'Lesión en Partido Oficial',
+        bodyZone: incidentData.bodyZone || 'Por evaluar en kinesiología',
+        description: incidentData.description,
+        diagnosis: `Lesión en partido ${targetMatch.matchDay} vs ${targetMatch.opponent} (Minuto ${incidentData.minute}'). ${incidentData.description}`,
+        severity: incidentData.severity || 'Moderada',
+        dateInjured: targetMatch.date,
+        status: 'Lesionado',
+        treatment: 'Atención kinésica de urgencia en terreno de juego y reposo deportivo inmediato.',
+        medicalStaff: targetMatch.coachStaff?.kinesiologist || 'Kinesiólogo San Luis',
+        notes: `Ocurrió en partido oficial vs ${targetMatch.opponent} en el minuto ${incidentData.minute}'. ${incidentData.description}`,
+        matchId: targetMatch.id,
+        season: '2026',
+      });
+      newIncident.recordedInMedicalModule = true;
+      newIncident.medicalInjuryId = medicalInjuryId;
+    }
+
+    // Add match event to timeline
+    const injuryEvent: MatchEvent = {
+      id: `ev-${Date.now()}`,
+      minute: incidentData.minute,
+      type: 'injury',
+      playerId: incidentData.playerId,
+      detail: `Lesión: ${incidentData.description}`,
+      injuryIncident: newIncident,
+    };
+
+    const updatedIncidents = [...(targetMatch.injuryIncidents || []), newIncident];
+    const updatedEvents = [...targetMatch.events, injuryEvent].sort((a, b) => a.minute - b.minute);
+
+    updateMatch(matchId, {
+      injuryIncidents: updatedIncidents,
+      events: updatedEvents,
+    });
+  };
+
+  const removeMatchInjury = (matchId: string, incidentId: string) => {
+    const targetMatch = matches.find((m) => m.id === matchId);
+    if (!targetMatch) return;
+
+    const updatedIncidents = (targetMatch.injuryIncidents || []).filter((i) => i.id !== incidentId);
+    const updatedEvents = targetMatch.events.filter((e) => e.injuryIncident?.id !== incidentId);
+
+    updateMatch(matchId, {
+      injuryIncidents: updatedIncidents,
+      events: updatedEvents,
+    });
+  };
+
+  const addCitation = (citationData: Omit<MatchCitation, 'id' | 'createdAt'>): string => {
+    const newId = `cit-${Date.now()}`;
+    const newCitation: MatchCitation = {
+      ...citationData,
+      id: newId,
+      createdAt: new Date().toISOString(),
+    };
+    setCitations((prev) => [newCitation, ...prev]);
+    setDoc(doc(db, 'citations', newId), newCitation).catch(console.error);
+    return newId;
+  };
+
+  const updateCitation = (id: string, partial: Partial<MatchCitation>) => {
+    setCitations((prev) => prev.map((c) => (c.id === id ? { ...c, ...partial } : c)));
+    setDoc(doc(db, 'citations', id), partial, { merge: true }).catch(console.error);
+  };
+
+  const deleteCitation = (id: string) => {
+    setCitations((prev) => prev.filter((c) => c.id !== id));
+    deleteDoc(doc(db, 'citations', id)).catch(console.error);
+  };
+
+  const getCitationById = (id: string) => {
+    return citations.find((c) => c.id === id);
+  };
+
+  // Physical Area (Sub-14 a Sub-20) & GPS (Sub-20)
+  const updateMatchPhysicalReport = (matchId: string, report: MatchPhysicalReport) => {
+    updateMatch(matchId, { physicalReport: report });
+  };
+
+  const updateMatchGpsReport = (matchId: string, report: MatchGpsReport) => {
+    updateMatch(matchId, { gpsReport: report });
+  };
+
+  // Weekly Physical Control (Sub-16 a Sub-20): Check-in & Check-out
+  const addWeeklyCheckIn = (entryData: Omit<WeeklyCheckInEntry, 'id' | 'createdAt'>): string => {
+    const newId = `wcin-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
+    const newEntry: WeeklyCheckInEntry = {
+      ...entryData,
+      id: newId,
+      createdAt: new Date().toISOString(),
+    };
+    setWeeklyCheckIns((prev) => [newEntry, ...prev.filter(e => !(e.playerId === newEntry.playerId && e.date === newEntry.date))]);
+    setDoc(doc(db, 'checkins', newId), newEntry).catch(console.error);
+    return newId;
+  };
+
+  const updateWeeklyCheckIn = (id: string, partial: Partial<WeeklyCheckInEntry>) => {
+    setWeeklyCheckIns((prev) => prev.map((e) => (e.id === id ? { ...e, ...partial } : e)));
+    setDoc(doc(db, 'checkins', id), partial, { merge: true }).catch(console.error);
+  };
+
+  const deleteWeeklyCheckIn = (id: string) => {
+    setWeeklyCheckIns((prev) => prev.filter((e) => e.id !== id));
+    deleteDoc(doc(db, 'checkins', id)).catch(console.error);
+  };
+
+  const addWeeklyCheckInsBatch = (entries: Omit<WeeklyCheckInEntry, 'id' | 'createdAt'>[]) => {
+    if (!entries || entries.length === 0) return;
+    const now = new Date().toISOString();
+    const newItems: WeeklyCheckInEntry[] = entries.map((entryData, idx) => ({
+      ...entryData,
+      id: `wcin-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 4)}`,
+      createdAt: now,
+    }));
+
+    setWeeklyCheckIns((prev) => {
+      const keys = new Set(newItems.map((n) => `${n.playerId}_${n.date}`));
+      return [...newItems, ...prev.filter((e) => !keys.has(`${e.playerId}_${e.date}`))];
+    });
+
+    try {
+      const batch = writeBatch(db);
+      newItems.forEach((item) => {
+        batch.set(doc(db, 'checkins', item.id), item);
+      });
+      batch.commit().catch(console.error);
+    } catch (err) {
+      console.warn('Batch checkins Firestore write error', err);
+    }
+  };
+
+  const addWeeklyCheckOut = (entryData: Omit<WeeklyCheckOutEntry, 'id' | 'createdAt'>): string => {
+    const newId = `wcout-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
+    const newEntry: WeeklyCheckOutEntry = {
+      ...entryData,
+      id: newId,
+      createdAt: new Date().toISOString(),
+    };
+    setWeeklyCheckOuts((prev) => [newEntry, ...prev.filter(e => !(e.playerId === newEntry.playerId && e.date === newEntry.date))]);
+    setDoc(doc(db, 'checkouts', newId), newEntry).catch(console.error);
+    return newId;
+  };
+
+  const addWeeklyCheckOutsBatch = (entries: Omit<WeeklyCheckOutEntry, 'id' | 'createdAt'>[]) => {
+    if (!entries || entries.length === 0) return;
+    const now = new Date().toISOString();
+    const newItems: WeeklyCheckOutEntry[] = entries.map((entryData, idx) => ({
+      ...entryData,
+      id: `wcout-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 4)}`,
+      createdAt: now,
+    }));
+
+    setWeeklyCheckOuts((prev) => {
+      const keys = new Set(newItems.map((n) => `${n.playerId}_${n.date}`));
+      return [...newItems, ...prev.filter((e) => !keys.has(`${e.playerId}_${e.date}`))];
+    });
+
+    try {
+      const batch = writeBatch(db);
+      newItems.forEach((item) => {
+        batch.set(doc(db, 'checkouts', item.id), item);
+      });
+      batch.commit().catch(console.error);
+    } catch (err) {
+      console.warn('Batch checkouts Firestore write error', err);
+    }
+  };
+
+  const updateWeeklyCheckOut = (id: string, partial: Partial<WeeklyCheckOutEntry>) => {
+    setWeeklyCheckOuts((prev) => prev.map((e) => (e.id === id ? { ...e, ...partial } : e)));
+    setDoc(doc(db, 'checkouts', id), partial, { merge: true }).catch(console.error);
+  };
+
+  const deleteWeeklyCheckOut = (id: string) => {
+    setWeeklyCheckOuts((prev) => prev.filter((e) => e.id !== id));
+    deleteDoc(doc(db, 'checkouts', id)).catch(console.error);
+  };
+
   // Backup & Restore
   const resetToDefaultData = () => {
     setPlayers(INITIAL_PLAYERS);
     setMatches(INITIAL_MATCHES);
+    setInjuries(INITIAL_INJURIES);
+    setCitations(INITIAL_CITATIONS);
+    setWeeklyCheckIns(INITIAL_WEEKLY_CHECKINS);
+    setWeeklyCheckOuts(INITIAL_WEEKLY_CHECKOUTS);
     setClubInfo(INITIAL_CLUB_INFO);
     setActiveCategoryState('Sub 14');
     setCategoryStaff(INITIAL_STAFF_BY_CATEGORY);
     setSelectedMatchId(INITIAL_MATCHES[0].id);
     localStorage.removeItem(STORAGE_KEY_PLAYERS);
     localStorage.removeItem(STORAGE_KEY_MATCHES);
+    localStorage.removeItem(STORAGE_KEY_INJURIES);
+    localStorage.removeItem(STORAGE_KEY_CITATIONS);
+    localStorage.removeItem(STORAGE_KEY_CHECKINS);
+    localStorage.removeItem(STORAGE_KEY_CHECKOUTS);
     localStorage.removeItem(STORAGE_KEY_CLUB);
     localStorage.removeItem(STORAGE_KEY_ACTIVE_CATEGORY);
     localStorage.removeItem(STORAGE_KEY_STAFF_BY_CAT);
@@ -705,6 +1271,12 @@ export const FootballProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       });
       INITIAL_MATCHES.forEach((m) => {
         batch.set(doc(db, 'matches', m.id), m);
+      });
+      INITIAL_INJURIES.forEach((inj) => {
+        batch.set(doc(db, 'injuries', inj.id), inj);
+      });
+      INITIAL_CITATIONS.forEach((cit) => {
+        batch.set(doc(db, 'citations', cit.id), cit);
       });
       batch.set(doc(db, 'club', 'info'), INITIAL_CLUB_INFO);
       Object.entries(INITIAL_STAFF_BY_CATEGORY).forEach(([cat, staff]) => {
@@ -731,6 +1303,10 @@ export const FootballProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       clubInfo,
       players,
       matches,
+      injuries,
+      citations,
+      weeklyCheckIns,
+      weeklyCheckOuts,
       categoryStaff,
       activeCategory,
       users: usersData
@@ -763,6 +1339,24 @@ export const FootballProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         if (data.matches.length > 0) {
           setSelectedMatchId(data.matches[0].id);
         }
+      }
+      if (data.injuries && Array.isArray(data.injuries)) {
+        setInjuries(data.injuries);
+        data.injuries.forEach((inj: PlayerInjury) => {
+          if (inj.id) batch.set(doc(db, 'injuries', inj.id), inj);
+        });
+      }
+      if (data.citations && Array.isArray(data.citations)) {
+        setCitations(data.citations);
+        data.citations.forEach((cit: MatchCitation) => {
+          if (cit.id) batch.set(doc(db, 'citations', cit.id), cit);
+        });
+      }
+      if (data.weeklyCheckIns && Array.isArray(data.weeklyCheckIns)) {
+        setWeeklyCheckIns(data.weeklyCheckIns);
+      }
+      if (data.weeklyCheckOuts && Array.isArray(data.weeklyCheckOuts)) {
+        setWeeklyCheckOuts(data.weeklyCheckOuts);
       }
       if (data.clubInfo && typeof data.clubInfo === 'object') {
         setClubInfo(data.clubInfo);
@@ -823,6 +1417,31 @@ export const FootballProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         updatePlayerRating,
         updateMatchScore,
         finishMatch,
+        injuries,
+        addInjury,
+        updateInjury,
+        deleteInjury,
+        dischargeInjury,
+        isPlayerInjured,
+        recordMatchInjury,
+        removeMatchInjury,
+        citations,
+        addCitation,
+        updateCitation,
+        deleteCitation,
+        getCitationById,
+        updateMatchPhysicalReport,
+        updateMatchGpsReport,
+        weeklyCheckIns,
+        addWeeklyCheckIn,
+        addWeeklyCheckInsBatch,
+        updateWeeklyCheckIn,
+        deleteWeeklyCheckIn,
+        weeklyCheckOuts,
+        addWeeklyCheckOut,
+        addWeeklyCheckOutsBatch,
+        updateWeeklyCheckOut,
+        deleteWeeklyCheckOut,
         resetToDefaultData,
         exportDatabaseJson,
         importDatabaseJson,
