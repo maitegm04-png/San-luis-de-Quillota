@@ -1,64 +1,59 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Helper to validate document IDs
-    function isValidId(id) {
-      return id is string && id.size() > 0 && id.size() <= 64;
-    }
-
     // Players collection
     match /players/{playerId} {
-      allow read, write: if isValidId(playerId);
+      allow read, write: if true;
     }
 
     // Match sheets collection
     match /matches/{matchId} {
-      allow read, write: if isValidId(matchId);
+      allow read, write: if true;
     }
 
     // Club configuration
     match /club/{docId} {
-      allow read, write: if isValidId(docId);
+      allow read, write: if true;
     }
 
     // Staff per category
     match /staff/{categoryId} {
-      allow read, write: if isValidId(categoryId);
+      allow read, write: if true;
     }
 
     // Users collection
     match /users/{userId} {
-      allow read, write: if isValidId(userId);
+      allow read, write: if true;
     }
 
     // Weekly planning collection
     match /weekly_plans/{planId} {
-      allow read, write: if isValidId(planId);
+      allow read, write: if true;
     }
 
     // Medical injuries collection
     match /injuries/{injuryId} {
-      allow read, write: if isValidId(injuryId);
+      allow read, write: if true;
     }
 
     // Citations / Convocatorias collection
     match /citations/{citationId} {
-      allow read, write: if isValidId(citationId);
+      allow read, write: if true;
     }
 
     // Daily wellness check-ins
     match /checkins/{checkinId} {
-      allow read, write: if isValidId(checkinId);
+      allow read, write: if true;
     }
 
     // Daily post-session check-outs
     match /checkouts/{checkoutId} {
-      allow read, write: if isValidId(checkoutId);
+      allow read, write: if true;
     }
 
     // Connection testing
     match /test/{docId} {
-      allow read, write: if isValidId(docId);
+      allow read, write: if true;
     }
   }
 }

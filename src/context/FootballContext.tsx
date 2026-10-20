@@ -430,7 +430,7 @@ export const FootballProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setCategoryStaff((prev) => {
       const current = prev[cat] || INITIAL_STAFF_BY_CATEGORY[cat] || clubInfo.coachStaff;
       const updated = { ...current, ...newStaff };
-      setDoc(doc(db, 'staff', cat), updated, { merge: true }).catch(console.error);
+      setDoc(doc(db, 'staff', cat), cleanForFirestore(updated), { merge: true }).catch(console.error);
       return { ...prev, [cat]: updated };
     });
   };
@@ -440,6 +440,23 @@ export const FootballProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const getPlayerById = (id?: string) => {
     if (!id) return undefined;
     return players.find((p) => p.id === id);
+  };
+
+  // Helper to strip undefined values so Firestore never throws unsupported field value error
+  const cleanForFirestore = <T extends Record<string, any>>(obj: T): any => {
+    if (obj === null || obj === undefined || typeof obj !== 'object') {
+      return obj;
+    }
+    if (Array.isArray(obj)) {
+      return obj.map(cleanForFirestore);
+    }
+    const cleaned: Record<string, any> = {};
+    for (const [key, val] of Object.entries(obj)) {
+      if (val !== undefined) {
+        cleaned[key] = cleanForFirestore(val);
+      }
+    }
+    return cleaned;
   };
 
   const addPlayer = (playerData: Omit<Player, 'id' | 'stats'>) => {
@@ -458,18 +475,34 @@ export const FootballProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         avgRating: 0,
       },
     };
-    setPlayers((prev) => [...prev, newPlayer]);
+    setPlayers((prev) => {
+      const next = [...prev, newPlayer];
+      try {
+        localStorage.setItem(STORAGE_KEY_PLAYERS, JSON.stringify(next));
+      } catch (e) {
+        console.warn('LocalStorage error saving player:', e);
+      }
+      return next;
+    });
+
     if (canPerformFirebaseWrite()) {
-      setDoc(doc(db, 'players', newPlayer.id), newPlayer)
+      const sanitized = cleanForFirestore(newPlayer);
+      setDoc(doc(db, 'players', newPlayer.id), sanitized)
         .then(() => recordQuotaOperation('write', 1))
-        .catch(console.error);
+        .catch((err) => console.error('Error saving player to Firestore:', err));
     }
   };
 
   const updatePlayer = (id: string, updatedFields: Partial<Player>) => {
-    setPlayers((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, ...updatedFields } : p))
-    );
+    setPlayers((prev) => {
+      const next = prev.map((p) => (p.id === id ? { ...p, ...updatedFields } : p));
+      try {
+        localStorage.setItem(STORAGE_KEY_PLAYERS, JSON.stringify(next));
+      } catch (e) {
+        console.warn('LocalStorage error updating player:', e);
+      }
+      return next;
+    });
 
     // Keep injuries in sync if category or name changes
     if (updatedFields.category || updatedFields.firstName || updatedFields.lastName || updatedFields.nickname) {
@@ -489,9 +522,10 @@ export const FootballProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
 
     if (canPerformFirebaseWrite()) {
-      setDoc(doc(db, 'players', id), updatedFields, { merge: true })
+      const sanitized = cleanForFirestore(updatedFields);
+      setDoc(doc(db, 'players', id), sanitized, { merge: true })
         .then(() => recordQuotaOperation('write', 1))
-        .catch(console.error);
+        .catch((err) => console.error('Error updating player in Firestore:', err));
     }
   };
 
@@ -538,7 +572,8 @@ export const FootballProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setMatches((prev) => [newMatch, ...prev]);
     setSelectedMatchId(newId);
     if (canPerformFirebaseWrite()) {
-      setDoc(doc(db, 'matches', newId), newMatch)
+      const sanitized = cleanForFirestore(newMatch);
+      setDoc(doc(db, 'matches', newId), sanitized)
         .then(() => recordQuotaOperation('write', 1))
         .catch(console.error);
     }
@@ -551,7 +586,8 @@ export const FootballProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         if (m.id === id) {
           const updated = { ...m, ...matchFields };
           if (canPerformFirebaseWrite()) {
-            setDoc(doc(db, 'matches', id), updated, { merge: true })
+            const sanitized = cleanForFirestore(updated);
+            setDoc(doc(db, 'matches', id), sanitized, { merge: true })
               .then(() => recordQuotaOperation('write', 1))
               .catch(console.error);
           }
@@ -574,7 +610,7 @@ export const FootballProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const updateClubInfo = (info: Partial<ClubInfo>) => {
     setClubInfo((prev) => {
       const next = { ...prev, ...info };
-      setDoc(doc(db, 'club', 'info'), next, { merge: true }).catch(console.error);
+      setDoc(doc(db, 'club', 'info'), cleanForFirestore(next), { merge: true }).catch(console.error);
       return next;
     });
   };
@@ -934,7 +970,7 @@ export const FootballProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     };
 
     setInjuries((prev) => [newInjury, ...prev]);
-    setDoc(doc(db, 'injuries', newId), newInjury).catch(console.error);
+    setDoc(doc(db, 'injuries', newId), cleanForFirestore(newInjury)).catch(console.error);
 
     const isActive = injuryData.status === 'Lesionado' || injuryData.status === 'En Recuperación' || injuryData.status === 'Activa';
     const isReintegro = injuryData.status === 'En Reintegro Deportivo' || injuryData.status === 'En Reintegro';
@@ -966,7 +1002,7 @@ export const FootballProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     const updated = { ...existing, ...partial };
     setInjuries((prev) => prev.map((i) => (i.id === id ? updated : i)));
-    setDoc(doc(db, 'injuries', id), updated, { merge: true }).catch(console.error);
+    setDoc(doc(db, 'injuries', id), cleanForFirestore(updated), { merge: true }).catch(console.error);
 
     const playerId = updated.playerId;
     const targetPlayer = players.find((p) => p.id === playerId);
@@ -1120,13 +1156,13 @@ export const FootballProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       createdAt: new Date().toISOString(),
     };
     setCitations((prev) => [newCitation, ...prev]);
-    setDoc(doc(db, 'citations', newId), newCitation).catch(console.error);
+    setDoc(doc(db, 'citations', newId), cleanForFirestore(newCitation)).catch(console.error);
     return newId;
   };
 
   const updateCitation = (id: string, partial: Partial<MatchCitation>) => {
     setCitations((prev) => prev.map((c) => (c.id === id ? { ...c, ...partial } : c)));
-    setDoc(doc(db, 'citations', id), partial, { merge: true }).catch(console.error);
+    setDoc(doc(db, 'citations', id), cleanForFirestore(partial), { merge: true }).catch(console.error);
   };
 
   const deleteCitation = (id: string) => {
@@ -1156,13 +1192,13 @@ export const FootballProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       createdAt: new Date().toISOString(),
     };
     setWeeklyCheckIns((prev) => [newEntry, ...prev.filter(e => !(e.playerId === newEntry.playerId && e.date === newEntry.date))]);
-    setDoc(doc(db, 'checkins', newId), newEntry).catch(console.error);
+    setDoc(doc(db, 'checkins', newId), cleanForFirestore(newEntry)).catch(console.error);
     return newId;
   };
 
   const updateWeeklyCheckIn = (id: string, partial: Partial<WeeklyCheckInEntry>) => {
     setWeeklyCheckIns((prev) => prev.map((e) => (e.id === id ? { ...e, ...partial } : e)));
-    setDoc(doc(db, 'checkins', id), partial, { merge: true }).catch(console.error);
+    setDoc(doc(db, 'checkins', id), cleanForFirestore(partial), { merge: true }).catch(console.error);
   };
 
   const deleteWeeklyCheckIn = (id: string) => {
@@ -1187,7 +1223,7 @@ export const FootballProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     try {
       const batch = writeBatch(db);
       newItems.forEach((item) => {
-        batch.set(doc(db, 'checkins', item.id), item);
+        batch.set(doc(db, 'checkins', item.id), cleanForFirestore(item));
       });
       batch.commit().catch(console.error);
     } catch (err) {
@@ -1203,7 +1239,7 @@ export const FootballProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       createdAt: new Date().toISOString(),
     };
     setWeeklyCheckOuts((prev) => [newEntry, ...prev.filter(e => !(e.playerId === newEntry.playerId && e.date === newEntry.date))]);
-    setDoc(doc(db, 'checkouts', newId), newEntry).catch(console.error);
+    setDoc(doc(db, 'checkouts', newId), cleanForFirestore(newEntry)).catch(console.error);
     return newId;
   };
 
@@ -1224,7 +1260,7 @@ export const FootballProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     try {
       const batch = writeBatch(db);
       newItems.forEach((item) => {
-        batch.set(doc(db, 'checkouts', item.id), item);
+        batch.set(doc(db, 'checkouts', item.id), cleanForFirestore(item));
       });
       batch.commit().catch(console.error);
     } catch (err) {
@@ -1234,7 +1270,7 @@ export const FootballProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const updateWeeklyCheckOut = (id: string, partial: Partial<WeeklyCheckOutEntry>) => {
     setWeeklyCheckOuts((prev) => prev.map((e) => (e.id === id ? { ...e, ...partial } : e)));
-    setDoc(doc(db, 'checkouts', id), partial, { merge: true }).catch(console.error);
+    setDoc(doc(db, 'checkouts', id), cleanForFirestore(partial), { merge: true }).catch(console.error);
   };
 
   const deleteWeeklyCheckOut = (id: string) => {

@@ -72,11 +72,20 @@ export const PlayerFormModal: React.FC<PlayerFormModalProps> = ({ playerToEdit, 
       const compressed = await compressImageForPlayer(file, 260, 260, 0.78);
       setPhotoUrl(compressed);
     } catch (err) {
-      console.error('Error comprimiendo foto:', err);
-      alert('No se pudo cargar la imagen. Intente con otra foto en formato JPG o PNG.');
+      console.error('Error comprimiendo foto, intentando carga directa:', err);
+      // Fallback: direct FileReader
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        if (event.target?.result) {
+          setPhotoUrl(event.target.result as string);
+        }
+      };
+      reader.onerror = () => {
+        alert('No se pudo cargar la imagen. Intente con otra foto en formato JPG o PNG.');
+      };
+      reader.readAsDataURL(file);
     } finally {
       setIsCompressingPhoto(false);
-      // Reset input value so user can re-select same file if needed
       e.target.value = '';
     }
   };
@@ -86,13 +95,13 @@ export const PlayerFormModal: React.FC<PlayerFormModalProps> = ({ playerToEdit, 
   };
 
   // Attributes
-  const [pace, setPace] = useState<number>(playerToEdit?.attributes.pace || 75);
-  const [shooting, setShooting] = useState<number>(playerToEdit?.attributes.shooting || 70);
-  const [passing, setPassing] = useState<number>(playerToEdit?.attributes.passing || 75);
-  const [dribbling, setDribbling] = useState<number>(playerToEdit?.attributes.dribbling || 74);
-  const [defending, setDefending] = useState<number>(playerToEdit?.attributes.defending || 65);
-  const [physical, setPhysical] = useState<number>(playerToEdit?.attributes.physical || 78);
-  const [goalkeeping, setGoalkeeping] = useState<number>(playerToEdit?.attributes.goalkeeping || 80);
+  const [pace, setPace] = useState<number>(playerToEdit?.attributes?.pace || 75);
+  const [shooting, setShooting] = useState<number>(playerToEdit?.attributes?.shooting || 70);
+  const [passing, setPassing] = useState<number>(playerToEdit?.attributes?.passing || 75);
+  const [dribbling, setDribbling] = useState<number>(playerToEdit?.attributes?.dribbling || 74);
+  const [defending, setDefending] = useState<number>(playerToEdit?.attributes?.defending || 65);
+  const [physical, setPhysical] = useState<number>(playerToEdit?.attributes?.physical || 78);
+  const [goalkeeping, setGoalkeeping] = useState<number>(playerToEdit?.attributes?.goalkeeping || 80);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -101,44 +110,49 @@ export const PlayerFormModal: React.FC<PlayerFormModalProps> = ({ playerToEdit, 
       return;
     }
 
-    const playerData = {
-      squadNumber: Number(squadNumber),
-      firstName: firstName.trim(),
-      lastName: lastName.trim(),
-      nickname: nickname.trim() || undefined,
-      primaryPosition,
-      secondaryPosition: secondaryPosition ? (secondaryPosition as Position) : undefined,
-      category: category.trim() || 'Primer Equipo',
-      birthDate,
-      dominantFoot,
-      heightCm: Number(heightCm),
-      weightKg: Number(weightKg),
-      status,
-      statusReason: statusReason.trim() || undefined,
-      idCard: idCard.trim() || undefined,
-      phone: phone.trim() || undefined,
-      email: email.trim() || undefined,
-      notes: notes.trim() || undefined,
-      avatarColor,
-      photoUrl: photoUrl.trim() || undefined,
-      attributes: {
-        pace: Number(pace),
-        shooting: Number(shooting),
-        passing: Number(passing),
-        dribbling: Number(dribbling),
-        defending: Number(defending),
-        physical: Number(physical),
-        goalkeeping: primaryPosition === 'POR' ? Number(goalkeeping) : undefined,
-      },
-    };
+    try {
+      const playerData = {
+        squadNumber: Number(squadNumber) || 1,
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        nickname: nickname.trim() || undefined,
+        primaryPosition,
+        secondaryPosition: secondaryPosition ? (secondaryPosition as Position) : undefined,
+        category: category.trim() || 'Primer Equipo',
+        birthDate: birthDate || '2008-01-01',
+        dominantFoot,
+        heightCm: Number(heightCm) || 175,
+        weightKg: Number(weightKg) || 70,
+        status,
+        statusReason: statusReason.trim() || undefined,
+        idCard: idCard.trim() || undefined,
+        phone: phone.trim() || undefined,
+        email: email.trim() || undefined,
+        notes: notes.trim() || undefined,
+        avatarColor: avatarColor || '#10b981',
+        photoUrl: photoUrl.trim() || undefined,
+        attributes: {
+          pace: Number(pace) || 75,
+          shooting: Number(shooting) || 70,
+          passing: Number(passing) || 75,
+          dribbling: Number(dribbling) || 74,
+          defending: Number(defending) || 65,
+          physical: Number(physical) || 78,
+          goalkeeping: primaryPosition === 'POR' ? (Number(goalkeeping) || 80) : undefined,
+        },
+      };
 
-    if (playerToEdit) {
-      updatePlayer(playerToEdit.id, playerData);
-    } else {
-      addPlayer(playerData);
+      if (playerToEdit) {
+        updatePlayer(playerToEdit.id, playerData);
+      } else {
+        addPlayer(playerData);
+      }
+
+      onClose();
+    } catch (err) {
+      console.error('Error guardando ficha del jugador:', err);
+      alert('Ocurrió un error al guardar la ficha. Verifique los campos obligatorios.');
     }
-
-    onClose();
   };
 
   return (
@@ -228,6 +242,19 @@ export const PlayerFormModal: React.FC<PlayerFormModalProps> = ({ playerToEdit, 
                       <Trash2 className="w-3.5 h-3.5" />
                       <span>Quitar</span>
                     </button>
+                  )}
+                </div>
+
+                <div className="pt-1.5 flex items-center gap-2">
+                  <input
+                    type="url"
+                    placeholder="O pegar URL directa de foto (https://...)"
+                    value={photoUrl.startsWith('data:') ? '' : photoUrl}
+                    onChange={(e) => setPhotoUrl(e.target.value)}
+                    className="flex-1 bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 text-[11px] text-white placeholder-slate-500 focus:outline-emerald-500"
+                  />
+                  {photoUrl && !photoUrl.startsWith('data:') && (
+                    <span className="text-[10px] text-emerald-400 font-bold shrink-0">URL cargada</span>
                   )}
                 </div>
               </div>

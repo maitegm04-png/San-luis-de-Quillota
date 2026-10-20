@@ -22,6 +22,7 @@ import { SanLuisLogo } from '../Common/SanLuisLogo';
 import { FirebaseQuotaBadge } from '../Common/FirebaseQuotaBadge';
 import { exportPlanningToPdf } from '../../services/planningPdfGenerator';
 import { canPerformFirebaseWrite, recordQuotaOperation, hasDataChanged } from '../../services/firebaseQuotaGuard';
+import { cleanForFirestore } from '../../utils/firestoreSanitizer';
 import { 
   Calendar, 
   ChevronLeft, 
@@ -158,7 +159,8 @@ export const WeeklyPlanningDashboard: React.FC = () => {
 
       // Guard: Only write to Firebase if data changed and quota limit allows it
       if (isDifferent && canPerformFirebaseWrite()) {
-        await setDoc(doc(db, 'weekly_plans', planId), updatedPlan, { merge: true });
+        const sanitizedPlan = cleanForFirestore(updatedPlan);
+        await setDoc(doc(db, 'weekly_plans', planId), sanitizedPlan, { merge: true });
         recordQuotaOperation('write', 1);
       }
 

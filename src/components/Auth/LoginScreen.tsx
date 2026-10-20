@@ -29,14 +29,14 @@ interface LoginScreenProps {
 }
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
-  const { login, registerUser, users } = useAuth();
+  const { login, registerUser, users, isAuthReady } = useAuth();
 
-  // If no users exist, default directly to creating the first user from scratch
-  const [mode, setMode] = useState<'login' | 'register'>(users.length === 0 ? 'register' : 'login');
+  const [mode, setMode] = useState<'login' | 'register'>('login');
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Register form state
   const [regName, setRegName] = useState('');
@@ -46,28 +46,37 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
   const [regCategory, setRegCategory] = useState<CategoryGroup>('Todas');
   const [regPhone, setRegPhone] = useState('');
 
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setIsSubmitting(true);
 
-    const res = login(identifier, password);
-    if (!res.success) {
-      setError(res.error || 'Credenciales inválidas');
-      return;
-    }
+    try {
+      const res = await login(identifier, password);
+      if (!res.success) {
+        setError(res.error || 'Credenciales inválidas');
+        return;
+      }
 
-    const foundUser = users.find(
-      (u) =>
-        u.email.toLowerCase() === identifier.trim().toLowerCase() ||
-        u.name.toLowerCase() === identifier.trim().toLowerCase()
-    );
+      const cleanId = identifier.trim().toLowerCase();
+      const foundUser = users.find(
+        (u) =>
+          u.email.toLowerCase() === cleanId ||
+          u.name.toLowerCase() === cleanId ||
+          u.id.toLowerCase() === cleanId
+      );
 
-    if (onLoginSuccess && foundUser) {
-      onLoginSuccess(foundUser.category);
+      if (onLoginSuccess && foundUser) {
+        onLoginSuccess(foundUser.category);
+      }
+    } catch (err: any) {
+      setError(err?.message || 'Error de conexión al ingresar');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const handleRegisterSubmit = (e: React.FormEvent) => {
+  const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
@@ -76,26 +85,33 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
       return;
     }
 
-    const colors = ['bg-amber-500', 'bg-emerald-600', 'bg-blue-600', 'bg-purple-600', 'bg-rose-600', 'bg-teal-600'];
-    const randomColor = colors[Math.floor(Math.random() * colors.length)];
+    setIsSubmitting(true);
+    try {
+      const colors = ['bg-amber-500', 'bg-emerald-600', 'bg-blue-600', 'bg-purple-600', 'bg-rose-600', 'bg-teal-600'];
+      const randomColor = colors[Math.floor(Math.random() * colors.length)];
 
-    const res = registerUser({
-      name: regName,
-      email: regEmail,
-      password: regPassword,
-      role: regRole,
-      category: regCategory,
-      avatarColor: randomColor,
-      phone: regPhone
-    });
+      const res = await registerUser({
+        name: regName,
+        email: regEmail,
+        password: regPassword,
+        role: regRole,
+        category: regCategory,
+        avatarColor: randomColor,
+        phone: regPhone
+      });
 
-    if (!res.success) {
-      setError(res.error || 'Error al crear la cuenta');
-      return;
-    }
+      if (!res.success) {
+        setError(res.error || 'Error al crear la cuenta');
+        return;
+      }
 
-    if (onLoginSuccess) {
-      onLoginSuccess(regCategory);
+      if (onLoginSuccess) {
+        onLoginSuccess(regCategory);
+      }
+    } catch (err: any) {
+      setError(err?.message || 'Error al registrar el usuario en la nube');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -228,10 +244,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
 
             <button
               type="submit"
-              className="w-full mt-2 py-3 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black rounded-xl text-sm flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20 transition-all cursor-pointer hover:scale-[1.01]"
+              disabled={isSubmitting}
+              className="w-full mt-2 py-3 bg-amber-400 hover:bg-amber-300 disabled:opacity-60 disabled:cursor-not-allowed text-slate-950 font-black rounded-xl text-sm flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20 transition-all cursor-pointer hover:scale-[1.01]"
             >
               <LogIn className="w-4 h-4" />
-              Entrar al Sistema
+              <span>{isSubmitting ? 'Verificando con la nube...' : 'Entrar al Sistema'}</span>
             </button>
           </form>
         )}
@@ -356,10 +373,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
 
             <button
               type="submit"
-              className="w-full mt-2 py-3 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black rounded-xl text-sm flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20 transition-all cursor-pointer hover:scale-[1.01]"
+              disabled={isSubmitting}
+              className="w-full mt-2 py-3 bg-amber-400 hover:bg-amber-300 disabled:opacity-60 disabled:cursor-not-allowed text-slate-950 font-black rounded-xl text-sm flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20 transition-all cursor-pointer hover:scale-[1.01]"
             >
               <UserPlus className="w-4 h-4" />
-              Crear Cuenta e Iniciar
+              <span>{isSubmitting ? 'Guardando en la nube...' : 'Crear Cuenta e Iniciar'}</span>
             </button>
           </form>
         )}

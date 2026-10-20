@@ -55,14 +55,14 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ onClos
     }
   };
 
-  const handleCreateUser = (e: React.FormEvent) => {
+  const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
     const colors = ['bg-emerald-600', 'bg-blue-600', 'bg-amber-500', 'bg-purple-600', 'bg-rose-600', 'bg-teal-600'];
     const randomColor = colors[Math.floor(Math.random() * colors.length)];
 
-    const res = registerUser({
+    const res = await registerUser({
       name,
       email,
       password,
@@ -87,9 +87,9 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ onClos
     setPassword('');
   };
 
-  const handleDelete = (userId: string, userName: string) => {
+  const handleDelete = async (userId: string, userName: string) => {
     if (window.confirm(`¿Estás seguro de eliminar el usuario de ${userName}?`)) {
-      const res = deleteUser(userId);
+      const res = await deleteUser(userId);
       if (!res.success) {
         alert(res.error);
       }

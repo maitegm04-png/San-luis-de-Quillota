@@ -7,7 +7,8 @@ export const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getA
 let firestoreInstance;
 try {
   firestoreInstance = initializeFirestore(app, {
-    localCache: persistentLocalCache()
+    localCache: persistentLocalCache(),
+    ignoreUndefinedProperties: true
   }, firebaseConfig.firestoreDatabaseId || undefined);
 } catch {
   firestoreInstance = firebaseConfig.firestoreDatabaseId 

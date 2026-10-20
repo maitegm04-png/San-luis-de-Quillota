@@ -1,25 +1,52 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { UserAccount } from '../types/auth';
-import { DEFAULT_USERS } from '../data/defaultUsers';
-import { collection, doc, setDoc, deleteDoc, onSnapshot, writeBatch } from 'firebase/firestore';
+import { collection, doc, setDoc, deleteDoc, onSnapshot, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
+import { cleanForFirestore } from '../utils/firestoreSanitizer';
 
 interface AuthContextType {
   currentUser: UserAccount | null;
   users: UserAccount[];
   isAuthenticated: boolean;
-  login: (identifier: string, password?: string) => { success: boolean; error?: string };
+  isAuthReady: boolean;
+  login: (identifier: string, password?: string) => Promise<{ success: boolean; error?: string }>;
   quickLogin: (userId: string) => void;
-  registerUser: (newUser: Omit<UserAccount, 'id' | 'createdAt' | 'lastLogin'>) => { success: boolean; error?: string };
+  registerUser: (newUser: Omit<UserAccount, 'id' | 'createdAt' | 'lastLogin'>) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
-  deleteUser: (userId: string) => { success: boolean; error?: string };
-  updateUser: (userId: string, data: Partial<UserAccount>) => void;
+  deleteUser: (userId: string) => Promise<{ success: boolean; error?: string }>;
+  updateUser: (userId: string, data: Partial<UserAccount>) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const STORAGE_KEY_USERS = 'san_luis_users_v3';
 const STORAGE_KEY_CURRENT_USER = 'san_luis_current_user_v3';
+
+// Helper to deduplicate users by email, prioritizing newest accounts
+function deduplicateUsers(userList: UserAccount[]): UserAccount[] {
+  const map = new Map<string, UserAccount>();
+  for (const u of userList) {
+    if (!u || !u.id) continue;
+    if (u.id.startsWith('usr-sub') || u.id === 'usr-coord') continue;
+    const emailKey = (u.email || '').trim().toLowerCase();
+    if (!emailKey) {
+      map.set(u.id, u);
+      continue;
+    }
+    const existing = map.get(emailKey);
+    if (!existing) {
+      map.set(emailKey, u);
+    } else {
+      // Keep the one with newer lastLogin or createdAt
+      const existingDate = existing.lastLogin || existing.createdAt || '';
+      const currentDate = u.lastLogin || u.createdAt || '';
+      if (currentDate >= existingDate) {
+        map.set(emailKey, u);
+      }
+    }
+  }
+  return Array.from(map.values());
+}
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [users, setUsers] = useState<UserAccount[]>(() => {
@@ -28,7 +55,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
-          return parsed.filter((u: UserAccount) => !u.id.startsWith('usr-sub') && u.id !== 'usr-coord');
+          return deduplicateUsers(parsed);
         }
       }
       return [];
@@ -53,30 +80,38 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   });
 
+  const [isAuthReady, setIsAuthReady] = useState<boolean>(false);
+
   // Listen to Firestore users in real-time
   useEffect(() => {
     const unsub = onSnapshot(collection(db, 'users'), (snapshot) => {
-      if (!snapshot.empty) {
-        const cloudUsers: UserAccount[] = [];
-        snapshot.forEach((d) => {
-          const u = d.data() as UserAccount;
-          // Delete any legacy dummy presets so club starts from 0
-          if (u.id.startsWith('usr-sub') || u.id === 'usr-coord') {
-            deleteDoc(doc(db, 'users', u.id)).catch(console.error);
-          } else {
-            cloudUsers.push(u);
-          }
-        });
-        setUsers(cloudUsers);
-      }
+      const cloudUsers: UserAccount[] = [];
+      snapshot.forEach((d) => {
+        const u = d.data() as UserAccount;
+        if (!u.id.startsWith('usr-sub') && u.id !== 'usr-coord') {
+          cloudUsers.push(u);
+        }
+      });
+
+      const unique = deduplicateUsers(cloudUsers);
+      setUsers(unique);
+      setIsAuthReady(true);
+
+      // Keep currentUser in sync if updated in cloud
+      setCurrentUser((prev) => {
+        if (!prev) return null;
+        const fresh = unique.find((u) => u.id === prev.id || u.email.toLowerCase() === prev.email.toLowerCase());
+        return fresh || prev;
+      });
     }, (error) => {
       console.warn('Firestore users fallback to localStorage', error);
+      setIsAuthReady(true);
     });
 
     return () => unsub();
   }, []);
 
-  // Sync users to storage
+  // Sync users to storage as local cache
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY_USERS, JSON.stringify(users));
@@ -98,38 +133,77 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [currentUser]);
 
-  const login = (identifier: string, password?: string): { success: boolean; error?: string } => {
+  const login = async (identifier: string, password?: string): Promise<{ success: boolean; error?: string }> => {
     const cleanId = identifier.trim().toLowerCase();
     if (!cleanId) {
       return { success: false, error: 'Por favor ingresa tu correo o usuario' };
     }
 
-    const found = users.find(
+    let searchPool = users;
+
+    // Check in local state first
+    let found = searchPool.find(
       (u) =>
         u.email.toLowerCase() === cleanId ||
         u.name.toLowerCase() === cleanId ||
         u.id.toLowerCase() === cleanId
     );
 
+    // If not found in memory (e.g., first visit on a new device or browser), fetch directly from Firestore
     if (!found) {
-      return { success: false, error: 'Usuario no encontrado. Verifica tus datos o crea una cuenta.' };
+      try {
+        const snap = await getDocs(collection(db, 'users'));
+        const cloudUsers: UserAccount[] = [];
+        snap.forEach((d) => {
+          const u = d.data() as UserAccount;
+          if (!u.id.startsWith('usr-sub') && u.id !== 'usr-coord') {
+            cloudUsers.push(u);
+          }
+        });
+        const fresh = deduplicateUsers(cloudUsers);
+        setUsers(fresh);
+        searchPool = fresh;
+        found = fresh.find(
+          (u) =>
+            u.email.toLowerCase() === cleanId ||
+            u.name.toLowerCase() === cleanId ||
+            u.id.toLowerCase() === cleanId
+        );
+      } catch (err) {
+        console.warn('Direct Firestore fetch error on login:', err);
+      }
     }
 
-    // If account has password, check it
+    if (!found) {
+      return { success: false, error: 'Usuario no encontrado. Verifica tu correo o crea una cuenta.' };
+    }
+
+    // Password verification (tolerant to trimmed case differences)
     if (found.password && password !== undefined) {
-      if (found.password !== password) {
+      const inputPass = password.trim();
+      const storedPass = found.password.trim();
+      const match = inputPass === storedPass || inputPass.toLowerCase() === storedPass.toLowerCase();
+      if (!match) {
         return { success: false, error: 'Contraseña incorrecta' };
       }
     }
 
-    const updatedUser = {
+    const updatedUser: UserAccount = {
       ...found,
       lastLogin: new Date().toISOString()
     };
 
     setCurrentUser(updatedUser);
-    setUsers((prev) => prev.map((u) => (u.id === found.id ? updatedUser : u)));
-    setDoc(doc(db, 'users', found.id), updatedUser, { merge: true }).catch(console.error);
+    setUsers((prev) => prev.map((u) => (u.id === found!.id ? updatedUser : u)));
+
+    // Persist lastLogin to cloud
+    try {
+      const sanitized = cleanForFirestore(updatedUser);
+      await setDoc(doc(db, 'users', found.id), sanitized, { merge: true });
+    } catch (e) {
+      console.warn('Error updating lastLogin in Firestore:', e);
+    }
+
     return { success: true };
   };
 
@@ -142,13 +216,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
       setCurrentUser(updatedUser);
       setUsers((prev) => prev.map((u) => (u.id === found.id ? updatedUser : u)));
-      setDoc(doc(db, 'users', found.id), updatedUser, { merge: true }).catch(console.error);
+      const sanitized = cleanForFirestore(updatedUser);
+      setDoc(doc(db, 'users', found.id), sanitized, { merge: true }).catch(console.error);
     }
   };
 
-  const registerUser = (
+  const registerUser = async (
     newUser: Omit<UserAccount, 'id' | 'createdAt' | 'lastLogin'>
-  ): { success: boolean; error?: string } => {
+  ): Promise<{ success: boolean; error?: string }> => {
     const cleanEmail = newUser.email.trim().toLowerCase();
     const cleanName = newUser.name.trim();
 
@@ -159,25 +234,77 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { success: false, error: 'El correo o nombre de usuario es obligatorio' };
     }
 
-    // Check if email already exists
-    const exists = users.some((u) => u.email.toLowerCase() === cleanEmail);
-    if (exists) {
-      return { success: false, error: 'Ya existe un usuario con este correo electrónico' };
+    // Check if account already exists in memory or in Firestore
+    let existing = users.find((u) => u.email.toLowerCase() === cleanEmail);
+
+    if (!existing) {
+      try {
+        const snap = await getDocs(collection(db, 'users'));
+        for (const d of snap.docs) {
+          const u = d.data() as UserAccount;
+          if (u.email && u.email.toLowerCase() === cleanEmail) {
+            existing = u;
+            break;
+          }
+        }
+      } catch (err) {
+        console.warn('Error checking existing user in Firestore:', err);
+      }
     }
 
+    const now = new Date().toISOString();
+
+    if (existing) {
+      // Update existing account with the new role/category/password and log in
+      const updated: UserAccount = {
+        ...existing,
+        name: cleanName,
+        password: newUser.password || existing.password,
+        role: newUser.role || existing.role,
+        category: newUser.category || existing.category,
+        avatarColor: newUser.avatarColor || existing.avatarColor || 'bg-amber-500',
+        phone: newUser.phone ?? existing.phone ?? '',
+        lastLogin: now,
+      };
+
+      const sanitized = cleanForFirestore(updated);
+      try {
+        await setDoc(doc(db, 'users', existing.id), sanitized, { merge: true });
+      } catch (err: any) {
+        console.error('Error saving updated user to Firestore:', err);
+        return { success: false, error: 'No se pudo sincronizar el usuario con la nube: ' + (err?.message || '') };
+      }
+
+      setUsers((prev) => prev.map((u) => (u.id === existing!.id ? updated : u)));
+      setCurrentUser(updated);
+      return { success: true };
+    }
+
+    // New account creation
+    const createdId = `usr-${Date.now()}`;
     const created: UserAccount = {
       ...newUser,
-      id: `usr-${Date.now()}`,
+      id: createdId,
       name: cleanName,
       email: cleanEmail,
-      createdAt: new Date().toISOString().split('T')[0],
-      lastLogin: new Date().toISOString()
+      phone: newUser.phone || '',
+      avatarColor: newUser.avatarColor || 'bg-amber-500',
+      createdAt: now.split('T')[0],
+      lastLogin: now
     };
 
-    const nextUsers = [...users, created];
+    const sanitized = cleanForFirestore(created);
+
+    try {
+      await setDoc(doc(db, 'users', createdId), sanitized);
+    } catch (err: any) {
+      console.error('Error writing new user to Firestore:', err);
+      return { success: false, error: 'Error guardando en la base de datos de Firebase: ' + (err?.message || '') };
+    }
+
+    const nextUsers = deduplicateUsers([...users, created]);
     setUsers(nextUsers);
     setCurrentUser(created);
-    setDoc(doc(db, 'users', created.id), created).catch(console.error);
     return { success: true };
   };
 
@@ -185,26 +312,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setCurrentUser(null);
   };
 
-  const deleteUser = (userId: string): { success: boolean; error?: string } => {
+  const deleteUser = async (userId: string): Promise<{ success: boolean; error?: string }> => {
     if (users.length <= 1) {
       return { success: false, error: 'No se puede eliminar el único usuario del club' };
     }
     setUsers((prev) => prev.filter((u) => u.id !== userId));
-    deleteDoc(doc(db, 'users', userId)).catch(console.error);
+    try {
+      await deleteDoc(doc(db, 'users', userId));
+    } catch (err) {
+      console.error('Error deleting user from Firestore:', err);
+    }
     if (currentUser?.id === userId) {
       setCurrentUser(null);
     }
     return { success: true };
   };
 
-  const updateUser = (userId: string, data: Partial<UserAccount>) => {
+  const updateUser = async (userId: string, data: Partial<UserAccount>) => {
     setUsers((prev) =>
       prev.map((u) => (u.id === userId ? { ...u, ...data } : u))
     );
     if (currentUser?.id === userId) {
       setCurrentUser((prev) => (prev ? { ...prev, ...data } : null));
     }
-    setDoc(doc(db, 'users', userId), data, { merge: true }).catch(console.error);
+    try {
+      const sanitized = cleanForFirestore(data);
+      await setDoc(doc(db, 'users', userId), sanitized, { merge: true });
+    } catch (err) {
+      console.error('Error updating user in Firestore:', err);
+    }
   };
 
   return (
@@ -213,6 +349,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         currentUser,
         users,
         isAuthenticated: !!currentUser,
+        isAuthReady,
         login,
         quickLogin,
         registerUser,
@@ -233,3 +370,4 @@ export const useAuth = () => {
   }
   return context;
 };
+
