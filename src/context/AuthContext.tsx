@@ -100,7 +100,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Keep currentUser in sync if updated in cloud
       setCurrentUser((prev) => {
         if (!prev) return null;
-        const fresh = unique.find((u) => u.id === prev.id || u.email.toLowerCase() === prev.email.toLowerCase());
+        const fresh = unique.find((u) => u.id === prev.id || (Boolean(u.email) && Boolean(prev.email) && u.email.toLowerCase() === prev.email.toLowerCase()));
         return fresh || prev;
       });
     }, (error) => {
@@ -144,9 +144,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Check in local state first
     let found = searchPool.find(
       (u) =>
-        u.email.toLowerCase() === cleanId ||
-        u.name.toLowerCase() === cleanId ||
-        u.id.toLowerCase() === cleanId
+        (u.email || '').toLowerCase() === cleanId ||
+        (u.name || '').toLowerCase() === cleanId ||
+        (u.id || '').toLowerCase() === cleanId
     );
 
     // If not found in memory (e.g., first visit on a new device or browser), fetch directly from Firestore
@@ -165,9 +165,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         searchPool = fresh;
         found = fresh.find(
           (u) =>
-            u.email.toLowerCase() === cleanId ||
-            u.name.toLowerCase() === cleanId ||
-            u.id.toLowerCase() === cleanId
+            (u.email || '').toLowerCase() === cleanId ||
+            (u.name || '').toLowerCase() === cleanId ||
+            (u.id || '').toLowerCase() === cleanId
         );
       } catch (err) {
         console.warn('Direct Firestore fetch error on login:', err);
@@ -235,7 +235,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     // Check if account already exists in memory or in Firestore
-    let existing = users.find((u) => u.email.toLowerCase() === cleanEmail);
+    let existing = users.find((u) => u.email && u.email.toLowerCase() === cleanEmail);
 
     if (!existing) {
       try {

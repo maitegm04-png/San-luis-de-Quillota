@@ -123,10 +123,14 @@ export const RIVAL_PRESETS: RivalClubPreset[] = [
   }
 ];
 
-export function findRivalPresetByOpponentName(opponentName: string): RivalClubPreset | undefined {
-  if (!opponentName) return undefined;
+export function findRivalPresetByOpponentName(opponentName?: string): RivalClubPreset | undefined {
+  if (!opponentName || typeof opponentName !== 'string') return undefined;
   const lower = opponentName.toLowerCase().trim();
+  if (!lower) return undefined;
   return RIVAL_PRESETS.find(
-    (r) => lower.includes(r.shortName.toLowerCase()) || lower.includes(r.name.toLowerCase()) || lower.includes(r.id)
+    (r) =>
+      lower.includes((r.shortName || '').toLowerCase()) ||
+      lower.includes((r.name || '').toLowerCase()) ||
+      (r.id && lower.includes(r.id.toLowerCase()))
   );
 }

@@ -36,10 +36,10 @@ export const CitationsDashboard: React.FC = () => {
     if (!searchTerm.trim()) return true;
     const term = searchTerm.toLowerCase();
     return (
-      c.opponent.toLowerCase().includes(term) ||
-      c.title.toLowerCase().includes(term) ||
-      c.category.toLowerCase().includes(term) ||
-      c.venue.toLowerCase().includes(term) ||
+      (c.opponent || '').toLowerCase().includes(term) ||
+      (c.title || '').toLowerCase().includes(term) ||
+      (c.category || '').toLowerCase().includes(term) ||
+      (c.venue || '').toLowerCase().includes(term) ||
       (c.matchDay || '').toLowerCase().includes(term)
     );
   });

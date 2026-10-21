@@ -65,7 +65,7 @@ export const PlayerList: React.FC<PlayerListProps> = ({ onOpenNewPlayer }) => {
 
         // Search query
         const query = searchQuery.toLowerCase().trim();
-        const fullName = `${player.firstName} ${player.lastName}`.toLowerCase();
+        const fullName = `${player.firstName || ''} ${player.lastName || ''}`.toLowerCase();
         const nickname = (player.nickname || '').toLowerCase();
         const dorsal = String(player.squadNumber);
         const dni = (player.idCard || '').toLowerCase();

@@ -258,8 +258,8 @@ export function matchPlayerByName(
   let maxScore = 0;
 
   for (const player of players) {
-    const pFirst = player.firstName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-    const pLast = player.lastName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const pFirst = (player.firstName || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const pLast = (player.lastName || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     let score = 0;
 
     for (const token of detectedTokens) {
@@ -514,9 +514,9 @@ export function parseNutritionPdfDocument(
   let extractedPlayerName = '';
 
   for (const player of players) {
-    const pFullName = `${player.firstName} ${player.lastName}`.toLowerCase();
-    const pLast = player.lastName.toLowerCase();
-    if (rawText.toLowerCase().includes(pFullName) || (fileName && fileName.toLowerCase().includes(pLast))) {
+    const pFullName = `${player.firstName || ''} ${player.lastName || ''}`.trim().toLowerCase();
+    const pLast = (player.lastName || '').toLowerCase();
+    if ((pFullName && (rawText || '').toLowerCase().includes(pFullName)) || (pLast && fileName && fileName.toLowerCase().includes(pLast))) {
       matchedPlayer = player;
       extractedPlayerName = `${player.firstName} ${player.lastName}`;
       break;

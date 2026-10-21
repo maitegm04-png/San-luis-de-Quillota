@@ -57,9 +57,9 @@ export const InjuriesDashboard: React.FC = () => {
 
     if (!searchTerm.trim()) return true;
     const term = searchTerm.toLowerCase();
-    const playerName = inj.playerName?.toLowerCase() || '';
-    const type = inj.injuryType.toLowerCase();
-    const zone = inj.bodyZone.toLowerCase();
+    const playerName = (inj.playerName || '').toLowerCase();
+    const type = (inj.injuryType || '').toLowerCase();
+    const zone = (inj.bodyZone || '').toLowerCase();
     const diag = (inj.diagnosis || '').toLowerCase();
     const desc = (inj.description || '').toLowerCase();
     return playerName.includes(term) || type.includes(term) || zone.includes(term) || diag.includes(term) || desc.includes(term);

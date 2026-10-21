@@ -745,7 +745,7 @@ export const WeeklyPlanningDashboard: React.FC = () => {
                         {weekDays.map((wd) => {
                           const currentBlock = plan.tecnica[wd.key]?.bloques[blockIdx] || { estructura: '', modulo: '' };
                           const normalizedEstructura = TECNICA_ESTRUCTURA_OPTIONS.find(
-                            (opt) => opt.toLowerCase() === (currentBlock.estructura || '').toLowerCase()
+                            (opt) => (opt || '').toLowerCase() === (currentBlock.estructura || '').toLowerCase()
                           ) || currentBlock.estructura;
 
                           return (

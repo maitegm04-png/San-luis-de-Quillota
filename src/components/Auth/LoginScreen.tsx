@@ -61,9 +61,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
       const cleanId = identifier.trim().toLowerCase();
       const foundUser = users.find(
         (u) =>
-          u.email.toLowerCase() === cleanId ||
-          u.name.toLowerCase() === cleanId ||
-          u.id.toLowerCase() === cleanId
+          (u.email || '').toLowerCase() === cleanId ||
+          (u.name || '').toLowerCase() === cleanId ||
+          (u.id || '').toLowerCase() === cleanId
       );
 
       if (onLoginSuccess && foundUser) {

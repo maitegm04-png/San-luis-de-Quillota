@@ -273,8 +273,13 @@ export const WeeklyPhysicalDashboard: React.FC = () => {
   // Filter category players
   const categoryPlayers = useMemo(() => {
     return players
-      .filter((p) => p.category === selectedCategory)
-      .sort((a, b) => a.squadNumber - b.squadNumber);
+      .filter((p) => {
+        if (p.category === selectedCategory) return true;
+        if (selectedCategory === 'Sub 20' && (p.category === 'Proyección' || p.category === 'Juvenil')) return true;
+        if (selectedCategory === 'Proyección' && p.category === 'Sub 20') return true;
+        return false;
+      })
+      .sort((a, b) => (a.squadNumber || 0) - (b.squadNumber || 0));
   }, [players, selectedCategory]);
 
   // Map of check-ins by `playerId_date`

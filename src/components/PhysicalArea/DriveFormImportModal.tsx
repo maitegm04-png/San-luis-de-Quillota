@@ -62,12 +62,14 @@ interface ParsedFormRow {
 }
 
 // Normalizer utility for robust name / surname comparison
-function normalizeStr(str: string): string {
+function normalizeStr(str?: string | null): string {
+  if (!str || typeof str !== 'string') return '';
   return str
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '') // remove accents
-    .replace(/[^a-z0-9\s]/g, '') // remove special chars
+    .replace(/[^a-z0-9\s]/g, ' ') // replace special chars with space
+    .replace(/\s+/g, ' ')
     .trim();
 }
 
@@ -82,24 +84,25 @@ function getDayOfWeekFromDate(dateStr: string): DayOfWeek {
   return 'Lunes';
 }
 
-// Helper to parse dates like "13/10/2026 7:23:58" or "2026-10-13" into "2026-10-13"
-function parseFormDate(raw: string, fallbackDate: string): { dateStr: string; day: DayOfWeek } {
+// Helper to parse dates like "13/10/2026 7:23:58" or "2026-10-13" or "13/10/26" into "2026-10-13"
+function parseFormDate(raw?: string | null, fallbackDate: string = '2026-10-14'): { dateStr: string; day: DayOfWeek } {
   if (!raw || typeof raw !== 'string') {
     return { dateStr: fallbackDate, day: getDayOfWeekFromDate(fallbackDate) };
   }
   const clean = raw.trim();
 
-  // Pattern DD/MM/YYYY or DD-MM-YYYY
-  const dmyMatch = clean.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+  // Pattern DD/MM/YYYY or DD-MM-YYYY or DD/MM/YY
+  const dmyMatch = clean.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
   if (dmyMatch) {
     const day = dmyMatch[1].padStart(2, '0');
     const month = dmyMatch[2].padStart(2, '0');
-    const year = dmyMatch[3];
+    let year = dmyMatch[3];
+    if (year.length === 2) year = `20${year}`;
     const dateStr = `${year}-${month}-${day}`;
     return { dateStr, day: getDayOfWeekFromDate(dateStr) };
   }
 
-  // Pattern YYYY-MM-DD
+  // Pattern YYYY-MM-DD or YYYY/MM/DD
   const ymdMatch = clean.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
   if (ymdMatch) {
     const year = ymdMatch[1];
@@ -119,9 +122,20 @@ export const DriveFormImportModal: React.FC<DriveFormImportModalProps> = ({
 }) => {
   const { players, addWeeklyCheckInsBatch, addWeeklyCheckOutsBatch } = useFootball();
 
-  // Squad of category for matching
+  // Squad of category for matching (safely includes Sub 20 <-> Proyección / Juvenil)
   const categoryPlayers = useMemo(() => {
-    return players.filter((p) => p.category === category);
+    const normCategory = normalizeStr(category);
+    return players.filter((p) => {
+      const pCat = normalizeStr(p.category || '');
+      if (pCat === normCategory) return true;
+      if (
+        (normCategory.includes('20') || normCategory.includes('proyeccion')) &&
+        (pCat.includes('20') || pCat.includes('proyeccion') || pCat.includes('juvenil'))
+      ) {
+        return true;
+      }
+      return false;
+    });
   }, [players, category]);
 
   // Mode: Auto, Check-in, or Check-out
@@ -142,54 +156,89 @@ export const DriveFormImportModal: React.FC<DriveFormImportModalProps> = ({
   const [availableDates, setAvailableDates] = useState<{ dateStr: string; label: string; count: number }[]>([]);
   const [hasParsed, setHasParsed] = useState<boolean>(false);
 
-  // Match player by full name or surname
-  const matchPlayer = (rawName: string): { player: Player | null; confidence: 'high' | 'medium' | 'none' } => {
-    if (!rawName || categoryPlayers.length === 0) return { player: null, confidence: 'none' };
+  // Match player by full name, surname, or email username
+  const matchPlayer = (rawName?: string | null): { player: Player | null; confidence: 'high' | 'medium' | 'none' } => {
+    if (!rawName || typeof rawName !== 'string') return { player: null, confidence: 'none' };
 
-    const normInput = normalizeStr(rawName);
+    let cleaned = rawName.trim();
+    // If it's an email, extract local part
+    if (cleaned.includes('@')) {
+      cleaned = cleaned.split('@')[0].replace(/[._-]+/g, ' ');
+    }
+
+    const normInput = normalizeStr(cleaned);
+    if (!normInput || normInput === 'nombres' || normInput === 'nombre' || normInput === 'apellidos') {
+      return { player: null, confidence: 'none' };
+    }
+
     const inputTokens = normInput.split(/\s+/).filter(Boolean);
+    if (inputTokens.length === 0) return { player: null, confidence: 'none' };
 
-    // 1. Exact match on full name or nickname
-    for (const p of categoryPlayers) {
-      const full = normalizeStr(`${p.firstName} ${p.lastName}`);
-      const reverse = normalizeStr(`${p.lastName} ${p.firstName}`);
-      const nick = p.nickname ? normalizeStr(p.nickname) : '';
+    // Candidate pools: search category squad first, then all players
+    const pool = categoryPlayers.length > 0 ? categoryPlayers : players;
+
+    // 1. Exact match on full name or nickname in category pool
+    for (const p of pool) {
+      const pFirst = normalizeStr(p.firstName);
+      const pLast = normalizeStr(p.lastName);
+      const full = `${pFirst} ${pLast}`.trim();
+      const reverse = `${pLast} ${pFirst}`.trim();
+      const nick = normalizeStr(p.nickname);
 
       if (normInput === full || normInput === reverse || (nick && normInput === nick)) {
         return { player: p, confidence: 'high' };
       }
     }
 
-    // 2. Exact match on surname (apellido)
-    for (const p of categoryPlayers) {
-      const surname = normalizeStr(p.lastName);
-      const surnameTokens = surname.split(/\s+/);
+    // 2. Surname matching in category pool
+    for (const p of pool) {
+      const pLast = normalizeStr(p.lastName);
+      const surnameTokens = pLast.split(/\s+/).filter(Boolean);
+      const pFirst = normalizeStr(p.firstName);
+      const firstTokens = pFirst.split(/\s+/).filter(Boolean);
 
-      // Check if surname token matches
-      if (surnameTokens.some((st) => inputTokens.includes(st))) {
+      // Check if primary surname or all surname tokens are present
+      const matchesPrimarySurname = surnameTokens.length > 0 && inputTokens.includes(surnameTokens[0]);
+      const matchesAnySurname = surnameTokens.some((st) => inputTokens.includes(st) && st.length >= 3);
+      const matchesFirst = firstTokens.some((ft) => inputTokens.includes(ft) && ft.length >= 3);
+
+      if (matchesPrimarySurname && matchesFirst) {
         return { player: p, confidence: 'high' };
+      }
+      if (matchesPrimarySurname) {
+        // High confidence if only player with this surname in pool
+        const countWithSurname = pool.filter((other) => normalizeStr(other.lastName).includes(surnameTokens[0])).length;
+        return { player: p, confidence: countWithSurname === 1 ? 'high' : 'medium' };
+      }
+      if (matchesAnySurname) {
+        return { player: p, confidence: 'medium' };
       }
     }
 
-    // 3. Normalized token containment (e.g. "Juanignacio" contains "ignacio", "Joseantonio" contains "jose" or "antonio")
-    for (const p of categoryPlayers) {
+    // 3. Substring / Token containment in category pool
+    for (const p of pool) {
       const pFirst = normalizeStr(p.firstName);
       const pLast = normalizeStr(p.lastName);
 
-      if (normInput.includes(pLast) || pLast.includes(normInput)) {
+      if ((pLast && normInput.includes(pLast)) || (normInput.length >= 4 && pLast.includes(normInput))) {
         return { player: p, confidence: 'medium' };
       }
-
-      if (normInput.includes(pFirst) && inputTokens.length >= 2) {
+      if (pFirst && normInput.includes(pFirst) && inputTokens.length >= 2) {
         return { player: p, confidence: 'medium' };
       }
     }
 
-    // 4. Fallback search across all players in the club if not in this category
-    for (const p of players) {
-      const pLast = normalizeStr(p.lastName);
-      if (inputTokens.includes(pLast)) {
-        return { player: p, confidence: 'medium' };
+    // 4. Global club pool fallback (if player was registered under different category)
+    if (pool !== players) {
+      for (const p of players) {
+        const pFirst = normalizeStr(p.firstName);
+        const pLast = normalizeStr(p.lastName);
+        const full = `${pFirst} ${pLast}`.trim();
+        const surnameTokens = pLast.split(/\s+/).filter(Boolean);
+
+        if (normInput === full || (surnameTokens.length > 0 && inputTokens.includes(surnameTokens[0]))) {
+          return { player: p, confidence: 'medium' };
+        }
       }
     }
 
@@ -198,210 +247,244 @@ export const DriveFormImportModal: React.FC<DriveFormImportModalProps> = ({
 
   // Process raw text into lines and fields
   const parseRawContent = (content: string) => {
-    if (!content.trim()) return;
+    if (!content || typeof content !== 'string' || !content.trim()) return;
 
-    const lines = content
-      .split(/\r?\n/)
-      .map((l) => l.trim())
-      .filter((l) => l.length > 0);
+    try {
+      const lines = content
+        .split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter((l) => l.length > 0);
 
-    if (lines.length === 0) return;
+      if (lines.length === 0) return;
 
-    // Detect delimiter: tab (\t), semicolon (;), or comma (,)
-    const firstLine = lines[0];
-    let delimiter = '\t';
-    if (firstLine.includes('\t')) delimiter = '\t';
-    else if (firstLine.includes(';') && (firstLine.match(/;/g)?.length || 0) >= (firstLine.match(/,/g)?.length || 0)) delimiter = ';';
-    else if (firstLine.includes(',')) delimiter = ',';
+      // Detect delimiter: tab (\t), semicolon (;), comma (,), or regex multiple spaces
+      const firstLine = lines[0];
+      let delimiterType: '\t' | ';' | ',' | 'spaces' = '\t';
+      if (firstLine.includes('\t')) {
+        delimiterType = '\t';
+      } else if (firstLine.includes(';') && (firstLine.match(/;/g)?.length || 0) >= (firstLine.match(/,/g)?.length || 0)) {
+        delimiterType = ';';
+      } else if (firstLine.includes(',')) {
+        delimiterType = ',';
+      } else if (/\s{2,}/.test(firstLine)) {
+        delimiterType = 'spaces';
+      }
 
-    // Parse header to identify column indices
-    const headerCols = firstLine.split(delimiter).map((c) => c.trim().toLowerCase());
-    const isHeaderPresent = headerCols.some((c) => 
-      c.includes('nombre') || 
-      c.includes('marca') || 
-      c.includes('sueño') || 
-      c.includes('pse') || 
-      c.includes('fatiga') ||
-      c.includes('jornada') ||
-      c.includes('columna')
-    );
+      const splitLine = (l: string): string[] => {
+        let items: string[] = [];
+        if (delimiterType === 'spaces') {
+          items = l.split(/\t|\s{2,}/);
+        } else {
+          items = l.split(delimiterType);
+        }
+        return items.map((c) => (c || '').trim().replace(/^["']|["']$/g, ''));
+      };
 
-    // Determine type: check-in vs check-out
-    let detected: 'checkin' | 'checkout' = 'checkin';
-    const headerText = headerCols.join(' ');
-    if (formType === 'checkin') {
-      detected = 'checkin';
-    } else if (formType === 'checkout') {
-      detected = 'checkout';
-    } else {
-      if (headerText.includes('pse') || headerText.includes('jornada') || headerText.includes('minutos')) {
+      // Parse header to identify column indices
+      const headerCols = splitLine(firstLine).map((c) => (c || '').trim().toLowerCase());
+      const isHeaderPresent = headerCols.some((c) => 
+        c.includes('nombre') || 
+        c.includes('marca') || 
+        c.includes('fecha') ||
+        c.includes('sueño') || 
+        c.includes('sueno') || 
+        c.includes('pse') || 
+        c.includes('fatiga') ||
+        c.includes('jornada') ||
+        c.includes('columna')
+      );
+
+      // Determine type: check-in vs check-out
+      let detected: 'checkin' | 'checkout' = 'checkin';
+      const headerText = headerCols.join(' ');
+      if (formType === 'checkin') {
+        detected = 'checkin';
+      } else if (formType === 'checkout') {
         detected = 'checkout';
       } else {
-        detected = 'checkin';
+        if (headerText.includes('pse') || headerText.includes('jornada') || headerText.includes('minutos')) {
+          detected = 'checkout';
+        } else {
+          detected = 'checkin';
+        }
       }
-    }
-    setDetectedType(detected);
+      setDetectedType(detected);
 
-    // Column index finders
-    let timestampIdx = headerCols.findIndex((c) => c.includes('marca') || c.includes('fecha') || c.includes('columna 1'));
-    let nameIdx = headerCols.findIndex((c) => c.includes('nombre') || c.includes('jugador') || c.includes('columna 3'));
-    let sleepIdx = headerCols.findIndex((c) => c.includes('sueño') || c.includes('sueno') || c.includes('dormir') || c.includes('descanso'));
-    let stressIdx = headerCols.findIndex((c) => c.includes('estrés') || c.includes('estres'));
-    let fatigueIdx = headerCols.findIndex((c) => c.includes('fatiga') || c.includes('cansancio'));
-    let sorenessIdx = headerCols.findIndex((c) => c.includes('dolor') || c.includes('muscular'));
-    let energyIdx = headerCols.findIndex((c) => c.includes('energ') || c.includes('nivel'));
-    let painZoneIdx = headerCols.findIndex((c) => c.includes('zona') || c.includes('específica') || c.includes('especifica') || c.includes('pre entrenamiento'));
-    
-    // Checkout columns
-    let pseIdx = headerCols.findIndex((c) => c.includes('pse') || c.includes('rpe') || c.includes('esfuerzo'));
-    let sessionTypeIdx = headerCols.findIndex((c) => c.includes('jornada') || c.includes('sesion') || c.includes('tipo'));
-    let minutesIdx = headerCols.findIndex((c) => c.includes('minutos') || c.includes('duracion') || c.includes('juego'));
-    let observationsIdx = headerCols.findIndex((c) => c.includes('observ') || c.includes('malestar') || c.includes('informar'));
+      // Column index finders
+      let timestampIdx = headerCols.findIndex((c) => c.includes('marca') || c.includes('fecha') || c.includes('columna 1') || c.includes('timestamp') || c.includes('hora'));
+      let nameIdx = headerCols.findIndex((c) => c.includes('nombre') || c.includes('jugador') || c.includes('columna 3') || c.includes('apellido') || c.includes('deportista') || c.includes('futbolista'));
+      let sleepIdx = headerCols.findIndex((c) => c.includes('sueño') || c.includes('sueno') || c.includes('dormir') || c.includes('descanso'));
+      let stressIdx = headerCols.findIndex((c) => c.includes('estrés') || c.includes('estres') || c.includes('stress'));
+      let fatigueIdx = headerCols.findIndex((c) => c.includes('fatiga') || c.includes('cansancio'));
+      let sorenessIdx = headerCols.findIndex((c) => c.includes('dolor') || c.includes('muscular') || c.includes('agujetas'));
+      let energyIdx = headerCols.findIndex((c) => c.includes('energ') || c.includes('nivel'));
+      let painZoneIdx = headerCols.findIndex((c) => c.includes('zona') || c.includes('específica') || c.includes('especifica') || c.includes('pre entrenamiento') || c.includes('molestia'));
+      
+      // Checkout columns
+      let pseIdx = headerCols.findIndex((c) => c.includes('pse') || c.includes('rpe') || c.includes('esfuerzo'));
+      let sessionTypeIdx = headerCols.findIndex((c) => c.includes('jornada') || c.includes('sesion') || c.includes('tipo') || c.includes('actividad'));
+      let minutesIdx = headerCols.findIndex((c) => c.includes('minutos') || c.includes('duracion') || c.includes('juego') || c.includes('tiempo'));
+      let observationsIdx = headerCols.findIndex((c) => c.includes('observ') || c.includes('malestar') || c.includes('informar') || c.includes('comentario'));
 
-    // If no header detected, assign defaults based on OCR of provided Google Forms
-    if (!isHeaderPresent) {
-      if (detected === 'checkin') {
-        timestampIdx = 0;
-        nameIdx = 1;
-        sleepIdx = 3;
-        stressIdx = 4;
-        fatigueIdx = 5;
-        sorenessIdx = 6;
-        energyIdx = 7;
-        painZoneIdx = 8;
+      // If no header detected, assign defaults based on Google Forms structure
+      if (!isHeaderPresent) {
+        const sampleCols = splitLine(lines[0]);
+        const emailInCol1 = sampleCols[1] && sampleCols[1].includes('@');
+
+        if (detected === 'checkin') {
+          timestampIdx = 0;
+          nameIdx = emailInCol1 ? 2 : 1;
+          sleepIdx = emailInCol1 ? 4 : 3;
+          stressIdx = emailInCol1 ? 5 : 4;
+          fatigueIdx = emailInCol1 ? 6 : 5;
+          sorenessIdx = emailInCol1 ? 7 : 6;
+          energyIdx = emailInCol1 ? 8 : 7;
+          painZoneIdx = emailInCol1 ? 9 : 8;
+        } else {
+          timestampIdx = 0;
+          nameIdx = emailInCol1 ? 2 : 1;
+          sessionTypeIdx = emailInCol1 ? 3 : 2;
+          pseIdx = emailInCol1 ? 5 : 4;
+          observationsIdx = emailInCol1 ? 6 : 5;
+          minutesIdx = emailInCol1 ? 8 : 7;
+        }
       } else {
-        timestampIdx = 0;
-        nameIdx = 1;
-        sessionTypeIdx = 2;
-        pseIdx = 4;
-        observationsIdx = 5;
-        minutesIdx = 7;
+        // Fallback column positions if not explicitly mapped
+        if (timestampIdx === -1) timestampIdx = 0;
+        if (nameIdx === -1) {
+          const sampleCols = splitLine(lines[0]);
+          nameIdx = (sampleCols[1] && sampleCols[1].includes('@')) ? 2 : 1;
+        }
       }
-    } else {
-      // Fallback column positions if not explicitly mapped
-      if (timestampIdx === -1) timestampIdx = 0;
-      if (nameIdx === -1) nameIdx = 1;
-    }
 
-    const dataLines = isHeaderPresent ? lines.slice(1) : lines;
-    const parsed: ParsedFormRow[] = [];
-    const dateSet = new Map<string, { label: string; count: number }>();
+      const dataLines = isHeaderPresent ? lines.slice(1) : lines;
+      const parsed: ParsedFormRow[] = [];
+      const dateSet = new Map<string, { label: string; count: number }>();
 
-    dataLines.forEach((line, idx) => {
-      const cols = line.split(delimiter).map((c) => c.trim().replace(/^["']|["']$/g, ''));
-      if (cols.length < 2) return;
+      dataLines.forEach((line, idx) => {
+        const cols = splitLine(line);
+        if (cols.length < 2) return;
 
-      const rawTimestamp = cols[timestampIdx] || '';
-      const rawName = cols[nameIdx] || cols[1] || '';
-      if (!rawName || rawName.toLowerCase() === 'nombres') return;
+        const rawTimestamp = cols[timestampIdx] || '';
+        let rawName = cols[nameIdx] || cols[1] || '';
+        if (rawName.includes('@') && cols[nameIdx + 1] && !cols[nameIdx + 1].includes('@')) {
+          rawName = cols[nameIdx + 1];
+        }
+        if (!rawName || (rawName || '').toLowerCase() === 'nombres' || (rawName || '').toLowerCase() === 'nombre') return;
 
-      const { dateStr, day } = parseFormDate(rawTimestamp, manualDate);
+        const { dateStr, day } = parseFormDate(rawTimestamp, manualDate);
 
-      // Track dates
-      const currentCount = dateSet.get(dateStr)?.count || 0;
-      dateSet.set(dateStr, {
-        label: `${day} ${dateStr}`,
-        count: currentCount + 1,
+        // Track dates
+        const currentCount = dateSet.get(dateStr)?.count || 0;
+        dateSet.set(dateStr, {
+          label: `${day} ${dateStr}`,
+          count: currentCount + 1,
+        });
+
+        const { player, confidence } = matchPlayer(rawName);
+
+        // Check-In fields (Escala 1 a 7 para todos los apartados)
+        const rawSleep = sleepIdx !== -1 && cols[sleepIdx] ? parseFloat(cols[sleepIdx]) || 5 : 5;
+        const sleepScore = Math.min(7, Math.max(1, Math.round(rawSleep)));
+        const rawStress = stressIdx !== -1 && cols[stressIdx] ? parseFloat(cols[stressIdx]) || 1 : 1;
+        const stressVal = Math.min(7, Math.max(1, Math.round(rawStress)));
+        const rawFatigue = fatigueIdx !== -1 && cols[fatigueIdx] ? parseFloat(cols[fatigueIdx]) || 2 : 2;
+        const fatigueVal = Math.min(7, Math.max(1, Math.round(rawFatigue)));
+        const rawSoreness = sorenessIdx !== -1 && cols[sorenessIdx] ? parseFloat(cols[sorenessIdx]) || 2 : 2;
+        const sorenessVal = Math.min(7, Math.max(1, Math.round(rawSoreness)));
+        const rawEnergy = energyIdx !== -1 && cols[energyIdx] ? parseFloat(cols[energyIdx]) || 6 : 6;
+        const energyVal = Math.min(7, Math.max(1, Math.round(rawEnergy)));
+
+        const rawPain = (painZoneIdx !== -1 && cols[painZoneIdx]) ? cols[painZoneIdx] : '';
+        const cleanPain = (rawPain || '').toLowerCase();
+        const painArea = rawPain && rawPain !== '-' && rawPain !== 'nada.' && rawPain !== 'no' && !cleanPain.includes('ningun') ? rawPain : undefined;
+
+        // Score Hooper 5-35: Sueño (1-7) + (8 - fatiga) + (8 - dolor) + (8 - estrés) + energía (1-7)
+        const score = Math.min(35, Math.max(5, sleepScore + (8 - fatigueVal) + (8 - sorenessVal) + (8 - stressVal) + energyVal));
+        const trafficLight = fatigueVal >= 6 || sorenessVal >= 6 || stressVal >= 6 || sleepScore <= 2 || score < 19
+          ? 'red'
+          : (fatigueVal >= 4 || sorenessVal >= 4 || stressVal >= 5 || sleepScore <= 3 || score < 26 ? 'yellow' : 'green');
+
+        // Check-Out fields
+        const rawPse = (pseIdx !== -1 && cols[pseIdx]) ? parseFloat(cols[pseIdx]) : 7;
+        const pse = isNaN(rawPse) ? 7 : Math.min(10, Math.max(0, rawPse));
+        
+        const rawSession = (sessionTypeIdx !== -1 && cols[sessionTypeIdx]) ? cols[sessionTypeIdx] : 'Entrenamiento';
+        const cleanSession = (rawSession || '').toLowerCase();
+        let sessionType: WeeklyCheckOutEntry['sessionType'] = 'Entrenamiento';
+        if (cleanSession.includes('kinesio')) sessionType = 'Recuperación';
+        else if (cleanSession.includes('compet') || cleanSession.includes('partido')) sessionType = 'Partido';
+        else if (cleanSession.includes('fuerza') || cleanSession.includes('gim')) sessionType = 'Fuerza / Gimnasio';
+        else if (cleanSession.includes('tact')) sessionType = 'Táctico';
+
+        // Duration & Minutos
+        let dur = 80;
+        if (minutesIdx !== -1 && cols[minutesIdx]) {
+          const minStr = (cols[minutesIdx] || '').replace(/[^0-9]/g, '');
+          const parsedMin = parseInt(minStr, 10);
+          if (!isNaN(parsedMin) && parsedMin > 0) dur = parsedMin;
+        }
+        if (sessionType === 'Partido' && dur < 60) dur = 90;
+
+        const rawObs = (observationsIdx !== -1 && cols[observationsIdx]) ? cols[observationsIdx] : '';
+        const cleanObs = (rawObs || '').toLowerCase();
+        const painPost = rawObs && rawObs !== '-' && rawObs !== 'nada.' && rawObs !== 'no' && !cleanObs.includes('ninguna') ? rawObs : undefined;
+        
+        let status: WeeklyCheckOutEntry['status'] = 'OK';
+        if (sessionType === 'Recuperación' || cleanSession.includes('kinesio')) status = 'Atención Kinesiológica';
+        else if (pse >= 9 || (painPost && painPost.length > 3)) status = 'Sobrecarga';
+        else if (pse >= 7) status = 'Fatiga Normal';
+
+        parsed.push({
+          id: `row-${idx}-${Date.now()}`,
+          rawTimestamp,
+          normalizedDate: dateStr,
+          dayOfWeek: day,
+          rawPlayerName: rawName,
+          matchedPlayerId: player ? player.id : null,
+          matchedPlayerName: player ? `${player.firstName} ${player.lastName}` : null,
+          confidence,
+          selected: true,
+          sleepScore,
+          stressLevel: stressVal,
+          fatigue: fatigueVal,
+          muscleSoreness: sorenessVal,
+          energyLevel: energyVal,
+          painArea,
+          sleepHours: sleepScore >= 4 ? 8 : 7,
+          sleepQuality: sleepScore,
+          mood: Math.min(5, Math.max(1, Math.round((energyVal / 7) * 5))),
+          wellnessScore: score,
+          trafficLight,
+          readyToTrain: trafficLight !== 'red',
+          sessionType,
+          durationMinutes: dur,
+          pse,
+          sessionRpeLoad: dur * pse,
+          painPostSession: painPost,
+          status,
+          notes: `Importado de formulario Drive (${rawTimestamp})`,
+        });
       });
 
-      const { player, confidence } = matchPlayer(rawName);
+      setParsedRows(parsed);
+      setHasParsed(true);
 
-      // Check-In fields (Escala 1 a 7 para todos los apartados)
-      const rawSleep = sleepIdx !== -1 && cols[sleepIdx] ? parseFloat(cols[sleepIdx]) || 5 : 5;
-      const sleepScore = Math.min(7, Math.max(1, Math.round(rawSleep)));
-      const rawStress = stressIdx !== -1 && cols[stressIdx] ? parseFloat(cols[stressIdx]) || 1 : 1;
-      const stressVal = Math.min(7, Math.max(1, Math.round(rawStress)));
-      const rawFatigue = fatigueIdx !== -1 && cols[fatigueIdx] ? parseFloat(cols[fatigueIdx]) || 2 : 2;
-      const fatigueVal = Math.min(7, Math.max(1, Math.round(rawFatigue)));
-      const rawSoreness = sorenessIdx !== -1 && cols[sorenessIdx] ? parseFloat(cols[sorenessIdx]) || 2 : 2;
-      const sorenessVal = Math.min(7, Math.max(1, Math.round(rawSoreness)));
-      const rawEnergy = energyIdx !== -1 && cols[energyIdx] ? parseFloat(cols[energyIdx]) || 6 : 6;
-      const energyVal = Math.min(7, Math.max(1, Math.round(rawEnergy)));
+      const datesList = Array.from(dateSet.entries()).map(([dateStr, meta]) => ({
+        dateStr,
+        label: meta.label,
+        count: meta.count,
+      }));
+      setAvailableDates(datesList);
 
-      const rawPain = painZoneIdx !== -1 ? cols[painZoneIdx] : '';
-      const painArea = rawPain && rawPain !== '-' && rawPain !== 'nada.' && rawPain !== 'no' && !rawPain.toLowerCase().includes('ningun') ? rawPain : undefined;
-
-      // Score Hooper 5-35: Sueño (1-7) + (8 - fatiga) + (8 - dolor) + (8 - estrés) + energía (1-7)
-      const score = Math.min(35, Math.max(5, sleepScore + (8 - fatigueVal) + (8 - sorenessVal) + (8 - stressVal) + energyVal));
-      const trafficLight = fatigueVal >= 6 || sorenessVal >= 6 || stressVal >= 6 || sleepScore <= 2 || score < 19
-        ? 'red'
-        : (fatigueVal >= 4 || sorenessVal >= 4 || stressVal >= 5 || sleepScore <= 3 || score < 26 ? 'yellow' : 'green');
-
-      // Check-Out fields
-      const rawPse = pseIdx !== -1 && cols[pseIdx] ? parseFloat(cols[pseIdx]) : 7;
-      const pse = isNaN(rawPse) ? 7 : Math.min(10, Math.max(0, rawPse));
-      
-      const rawSession = sessionTypeIdx !== -1 ? cols[sessionTypeIdx] : 'Entrenamiento';
-      let sessionType: WeeklyCheckOutEntry['sessionType'] = 'Entrenamiento';
-      if (rawSession.toLowerCase().includes('kinesio')) sessionType = 'Recuperación';
-      else if (rawSession.toLowerCase().includes('compet') || rawSession.toLowerCase().includes('partido')) sessionType = 'Partido';
-      else if (rawSession.toLowerCase().includes('fuerza') || rawSession.toLowerCase().includes('gim')) sessionType = 'Fuerza / Gimnasio';
-      else if (rawSession.toLowerCase().includes('tact')) sessionType = 'Táctico';
-
-      // Duration & Minutos
-      let dur = 80;
-      if (minutesIdx !== -1 && cols[minutesIdx]) {
-        const minStr = cols[minutesIdx].replace(/[^0-9]/g, '');
-        const parsedMin = parseInt(minStr, 10);
-        if (!isNaN(parsedMin) && parsedMin > 0) dur = parsedMin;
+      // If only one date is present, select it automatically for day-to-day upload
+      if (datesList.length === 1) {
+        setTargetDateFilter(datesList[0].dateStr);
+      } else if (datesList.length > 1) {
+        setTargetDateFilter(datesList[0].dateStr);
       }
-      if (sessionType === 'Partido' && dur < 60) dur = 90;
-
-      const rawObs = observationsIdx !== -1 ? cols[observationsIdx] : '';
-      const painPost = rawObs && rawObs !== '-' && rawObs !== 'nada.' && rawObs !== 'no' && !rawObs.toLowerCase().includes('ninguna') ? rawObs : undefined;
-      
-      let status: WeeklyCheckOutEntry['status'] = 'OK';
-      if (sessionType === 'Recuperación' || rawSession.toLowerCase().includes('kinesio')) status = 'Atención Kinesiológica';
-      else if (pse >= 9 || (painPost && painPost.length > 3)) status = 'Sobrecarga';
-      else if (pse >= 7) status = 'Fatiga Normal';
-
-      parsed.push({
-        id: `row-${idx}-${Date.now()}`,
-        rawTimestamp,
-        normalizedDate: dateStr,
-        dayOfWeek: day,
-        rawPlayerName: rawName,
-        matchedPlayerId: player ? player.id : null,
-        matchedPlayerName: player ? `${player.firstName} ${player.lastName}` : null,
-        confidence,
-        selected: true,
-        sleepScore,
-        stressLevel: stressVal,
-        fatigue: fatigueVal,
-        muscleSoreness: sorenessVal,
-        energyLevel: energyVal,
-        painArea,
-        sleepHours: sleepScore >= 4 ? 8 : 7,
-        sleepQuality: sleepScore,
-        mood: Math.min(5, Math.max(1, Math.round((energyVal / 7) * 5))),
-        wellnessScore: score,
-        trafficLight,
-        readyToTrain: trafficLight !== 'red',
-        sessionType,
-        durationMinutes: dur,
-        pse,
-        sessionRpeLoad: dur * pse,
-        painPostSession: painPost,
-        status,
-        notes: `Importado de formulario Drive (${rawTimestamp})`,
-      });
-    });
-
-    setParsedRows(parsed);
-    setHasParsed(true);
-
-    const datesList = Array.from(dateSet.entries()).map(([dateStr, meta]) => ({
-      dateStr,
-      label: meta.label,
-      count: meta.count,
-    }));
-    setAvailableDates(datesList);
-
-    // If only one date is present, select it automatically for day-to-day upload
-    if (datesList.length === 1) {
-      setTargetDateFilter(datesList[0].dateStr);
-    } else if (datesList.length > 1) {
-      setTargetDateFilter(datesList[0].dateStr);
+    } catch (err) {
+      console.error('Error procesando formulario Drive:', err);
     }
   };
 
@@ -835,11 +918,24 @@ export const DriveFormImportModal: React.FC<DriveFormImportModalProps> = ({
                               }`}
                             >
                               <option value="">⚠️ Sin identificar (elegir...)</option>
-                              {categoryPlayers.map((p) => (
-                                <option key={p.id} value={p.id}>
-                                  #{p.squadNumber} {p.lastName.toUpperCase()}, {p.firstName} ({p.primaryPosition})
-                                </option>
-                              ))}
+                              <optgroup label={`Plantel ${category}`}>
+                                {categoryPlayers.map((p) => (
+                                  <option key={p.id} value={p.id}>
+                                    #{p.squadNumber} {(p.lastName || '').toUpperCase()}, {p.firstName || ''} ({p.primaryPosition || ''})
+                                  </option>
+                                ))}
+                              </optgroup>
+                              {players.filter((p) => !categoryPlayers.some((cp) => cp.id === p.id)).length > 0 && (
+                                <optgroup label="Otras Categorías del Club">
+                                  {players
+                                    .filter((p) => !categoryPlayers.some((cp) => cp.id === p.id))
+                                    .map((p) => (
+                                      <option key={p.id} value={p.id}>
+                                        #{p.squadNumber} {(p.lastName || '').toUpperCase()}, {p.firstName || ''} ({p.category})
+                                      </option>
+                                    ))}
+                                </optgroup>
+                              )}
                             </select>
                           </td>
 
