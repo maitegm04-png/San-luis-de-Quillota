@@ -188,6 +188,7 @@ export const PlayerFichaPdfModal: React.FC<PlayerFichaPdfModalProps> = ({ player
                     <img
                       src={player.photoUrl}
                       alt={`${player.firstName} ${player.lastName}`}
+                      crossOrigin="anonymous"
                       className="w-32 h-32 rounded-2xl object-cover border-3 border-amber-400 shadow-md"
                     />
                   ) : (

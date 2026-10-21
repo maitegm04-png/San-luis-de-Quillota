@@ -1,7 +1,6 @@
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas-pro';
 import { Player } from '../types/football';
-import { POSITION_LABELS } from '../data/mockData';
 import { sanitizeClonedDocColors } from './pdfColorSanitizer';
 
 export interface PlayerFichaExportOptions {
@@ -42,28 +41,41 @@ export function calculatePlayerOverall(player: Player): number {
 
 /**
  * Exporta la ficha completa del jugador a un documento PDF descargable
- * utilizando renderizado nítido a 2x de escala.
+ * con renderizado nítido a 2x escala, colores exactos y paginación limpia.
  */
 export async function exportPlayerFichaToPdf(
   element: HTMLElement,
   options: PlayerFichaExportOptions
 ): Promise<boolean> {
   try {
+    const elWidth = element.offsetWidth || 820;
+    const elHeight = element.offsetHeight || 1200;
+
     const canvas = await html2canvas(element, {
-      scale: 2, // 2x escala para garantizar máxima nitidez de texto y foto
+      scale: 2, // 2x escala para garantizar máxima nitidez de texto, foto y firmas
       useCORS: true,
       allowTaint: true,
       backgroundColor: '#ffffff',
       logging: false,
-      windowWidth: 900,
+      width: elWidth,
+      height: elHeight,
+      scrollX: 0,
+      scrollY: 0,
       onclone: (clonedDoc) => {
-        sanitizeClonedDocColors(clonedDoc);
+        sanitizeClonedDocColors(clonedDoc, element);
+
+        const clonedFicha = clonedDoc.getElementById('printable-player-ficha');
+        if (clonedFicha) {
+          clonedFicha.style.width = `${elWidth}px`;
+          clonedFicha.style.maxWidth = `${elWidth}px`;
+          clonedFicha.style.margin = '0 auto';
+          clonedFicha.style.boxSizing = 'border-box';
+          clonedFicha.style.backgroundColor = '#ffffff';
+        }
       }
     });
 
-    const imgData = canvas.toDataURL('image/png');
-
-    // Formato vertical A4 estándar (210mm x 297mm) para fichas técnicas
+    // Formato vertical A4 estándar (210mm x 297mm)
     const pdf = new jsPDF({
       orientation: 'portrait',
       unit: 'mm',
@@ -73,24 +85,63 @@ export async function exportPlayerFichaToPdf(
     const pdfWidth = pdf.internal.pageSize.getWidth();
     const pdfHeight = pdf.internal.pageSize.getHeight();
 
-    const margin = 10;
-    const contentWidth = pdfWidth - margin * 2;
-    const imgHeight = (canvas.height * contentWidth) / canvas.width;
+    const marginX = 8;
+    const marginY = 8;
+    const maxContentWidth = pdfWidth - marginX * 2;
+    const maxContentHeight = pdfHeight - marginY * 2;
 
-    if (imgHeight <= pdfHeight - margin * 2) {
-      pdf.addImage(imgData, 'PNG', margin, margin, contentWidth, imgHeight);
+    const canvasPageHeight = Math.floor(canvas.width * (maxContentHeight / maxContentWidth));
+
+    // Si entra en 1 página (o leve tolerancia de 5%), renderizar directamente
+    if (canvas.height <= canvasPageHeight * 1.05) {
+      const imgRatio = canvas.width / canvas.height;
+      let renderWidth = maxContentWidth;
+      let renderHeight = renderWidth / imgRatio;
+
+      if (renderHeight > maxContentHeight) {
+        renderHeight = maxContentHeight;
+        renderWidth = renderHeight * imgRatio;
+      }
+
+      const posX = marginX + (maxContentWidth - renderWidth) / 2;
+      const posY = marginY;
+
+      const imgData = canvas.toDataURL('image/png');
+      pdf.addImage(imgData, 'PNG', posX, posY, renderWidth, renderHeight, undefined, 'FAST');
     } else {
-      let heightLeft = imgHeight;
-      let position = margin;
+      // Paginación limpia mediante rebanado (slicing) del canvas por página A4
+      const totalPages = Math.ceil(canvas.height / canvasPageHeight);
 
-      pdf.addImage(imgData, 'PNG', margin, position, contentWidth, imgHeight);
-      heightLeft -= (pdfHeight - margin * 2);
+      for (let p = 0; p < totalPages; p++) {
+        if (p > 0) pdf.addPage();
 
-      while (heightLeft > 0) {
-        position = heightLeft - imgHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, 'PNG', margin, position, contentWidth, imgHeight);
-        heightLeft -= pdfHeight;
+        const srcY = p * canvasPageHeight;
+        const srcH = Math.min(canvasPageHeight, canvas.height - srcY);
+
+        const sliceCanvas = document.createElement('canvas');
+        sliceCanvas.width = canvas.width;
+        sliceCanvas.height = srcH;
+        const sliceCtx = sliceCanvas.getContext('2d');
+
+        if (sliceCtx) {
+          sliceCtx.fillStyle = '#ffffff';
+          sliceCtx.fillRect(0, 0, sliceCanvas.width, sliceCanvas.height);
+          sliceCtx.drawImage(
+            canvas,
+            0,
+            srcY,
+            canvas.width,
+            srcH,
+            0,
+            0,
+            canvas.width,
+            srcH
+          );
+
+          const sliceData = sliceCanvas.toDataURL('image/png');
+          const sliceRenderHeight = (srcH * maxContentWidth) / canvas.width;
+          pdf.addImage(sliceData, 'PNG', marginX, marginY, maxContentWidth, sliceRenderHeight, undefined, 'FAST');
+        }
       }
     }
 

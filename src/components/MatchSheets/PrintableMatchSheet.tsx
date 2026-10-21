@@ -31,34 +31,93 @@ export const PrintableMatchSheet: React.FC<PrintableMatchSheetProps> = ({ match 
 
     setIsExporting(true);
     try {
+      const elWidth = element.offsetWidth || 820;
+      const elHeight = element.offsetHeight || 1200;
+
       const canvas = await html2canvas(element, {
         scale: 2, // High resolution for crisp printing
         useCORS: true,
+        allowTaint: true,
         logging: false,
         backgroundColor: '#ffffff',
+        width: elWidth,
+        height: elHeight,
+        scrollX: 0,
+        scrollY: 0,
         onclone: (clonedDoc) => {
-          sanitizeClonedDocColors(clonedDoc);
+          sanitizeClonedDocColors(clonedDoc, element);
+          const clonedSheet = clonedDoc.getElementById('official-match-sheet');
+          if (clonedSheet) {
+            clonedSheet.style.width = `${elWidth}px`;
+            clonedSheet.style.maxWidth = `${elWidth}px`;
+            clonedSheet.style.backgroundColor = '#ffffff';
+          }
         }
       });
 
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4',
+      });
+
       const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      const pdfHeight = pdf.internal.pageSize.getHeight();
 
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      let position = 0;
+      const marginX = 8;
+      const marginY = 8;
+      const maxContentWidth = pdfWidth - marginX * 2;
+      const maxContentHeight = pdfHeight - marginY * 2;
 
-      if (pdfHeight <= pageHeight) {
-        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      const canvasPageHeight = Math.floor(canvas.width * (maxContentHeight / maxContentWidth));
+
+      if (canvas.height <= canvasPageHeight * 1.05) {
+        const imgRatio = canvas.width / canvas.height;
+        let renderWidth = maxContentWidth;
+        let renderHeight = renderWidth / imgRatio;
+
+        if (renderHeight > maxContentHeight) {
+          renderHeight = maxContentHeight;
+          renderWidth = renderHeight * imgRatio;
+        }
+
+        const posX = marginX + (maxContentWidth - renderWidth) / 2;
+        const posY = marginY;
+
+        const imgData = canvas.toDataURL('image/png');
+        pdf.addImage(imgData, 'PNG', posX, posY, renderWidth, renderHeight, undefined, 'FAST');
       } else {
-        let remainingHeight = pdfHeight;
-        while (remainingHeight > 0) {
-          pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
-          remainingHeight -= pageHeight;
-          position -= pageHeight;
-          if (remainingHeight > 0) {
-            pdf.addPage();
+        const totalPages = Math.ceil(canvas.height / canvasPageHeight);
+
+        for (let p = 0; p < totalPages; p++) {
+          if (p > 0) pdf.addPage();
+
+          const srcY = p * canvasPageHeight;
+          const srcH = Math.min(canvasPageHeight, canvas.height - srcY);
+
+          const sliceCanvas = document.createElement('canvas');
+          sliceCanvas.width = canvas.width;
+          sliceCanvas.height = srcH;
+          const sliceCtx = sliceCanvas.getContext('2d');
+
+          if (sliceCtx) {
+            sliceCtx.fillStyle = '#ffffff';
+            sliceCtx.fillRect(0, 0, sliceCanvas.width, sliceCanvas.height);
+            sliceCtx.drawImage(
+              canvas,
+              0,
+              srcY,
+              canvas.width,
+              srcH,
+              0,
+              0,
+              canvas.width,
+              srcH
+            );
+
+            const sliceData = sliceCanvas.toDataURL('image/png');
+            const sliceRenderHeight = (srcH * maxContentWidth) / canvas.width;
+            pdf.addImage(sliceData, 'PNG', marginX, marginY, maxContentWidth, sliceRenderHeight, undefined, 'FAST');
           }
         }
       }
@@ -71,7 +130,6 @@ export const PrintableMatchSheet: React.FC<PrintableMatchSheetProps> = ({ match 
       pdf.save(fileName);
     } catch (err) {
       console.error('Error al exportar a PDF:', err);
-      // Fallback
       window.print();
     } finally {
       setIsExporting(false);

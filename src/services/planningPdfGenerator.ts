@@ -11,31 +11,48 @@ export interface PdfExportOptions {
 
 /**
  * Genera y descarga un archivo PDF de alta resolución con la planificación semanal de San Luis de Quillota.
+ * Formato apaisado A4 (Landscape) nítido, con colores oficiales y preservando todo el texto ingresado.
  */
 export async function exportPlanningToPdf(
   element: HTMLElement,
   options: PdfExportOptions
 ): Promise<boolean> {
   try {
+    const elWidth = Math.max(element.scrollWidth, element.offsetWidth, 1200);
+    const elHeight = element.scrollHeight || element.offsetHeight;
+
     const canvas = await html2canvas(element, {
-      scale: 2, // 2x para nitidez de texto e imágenes
+      scale: 2, // 2x para nitidez cristalina en textos, esquemas e insignias
       useCORS: true,
       allowTaint: true,
       backgroundColor: '#ffffff',
       logging: false,
-      windowWidth: 1350,
+      width: elWidth,
+      height: elHeight,
+      scrollX: 0,
+      scrollY: 0,
       onclone: (clonedDoc) => {
-        // Sanitizar colores modernos (oklch, oklab) para compatibilidad total
-        sanitizeClonedDocColors(clonedDoc);
+        // 1. Sanitizar colores y estilos computados
+        sanitizeClonedDocColors(clonedDoc, element);
 
-        // Asegurar que el membrete oficial del club sea visible en el PDF
+        const clonedArea = clonedDoc.getElementById('printable-planning-area');
+        if (clonedArea) {
+          clonedArea.style.width = `${elWidth}px`;
+          clonedArea.style.minWidth = `${elWidth}px`;
+          clonedArea.style.margin = '0';
+          clonedArea.style.padding = '16px';
+          clonedArea.style.backgroundColor = '#ffffff';
+          clonedArea.style.overflow = 'visible';
+        }
+
+        // 2. Asegurar membrete oficial visible
         const header = clonedDoc.getElementById('planning-pdf-header');
         if (header) {
           header.style.display = 'flex';
           header.style.visibility = 'visible';
         }
 
-        // Reemplazar textareas con divs para que se renderice TODO el texto escrito de forma limpia y completa
+        // 3. Reemplazar textareas con divs para renderizado íntegro
         const textareas = clonedDoc.querySelectorAll('textarea');
         textareas.forEach((ta) => {
           const div = clonedDoc.createElement('div');
@@ -48,13 +65,13 @@ export async function exportPlanningToPdf(
           div.style.minHeight = '32px';
           div.style.color = '#0f172a';
           div.style.backgroundColor = '#f8fafc';
-          div.style.border = '1px solid #e2e8f0';
+          div.style.border = '1px solid #cbd5e1';
           div.style.borderRadius = '4px';
           div.style.fontFamily = 'inherit';
           ta.parentNode?.replaceChild(div, ta);
         });
 
-        // Reemplazar selects con etiquetas legibles completas
+        // 4. Reemplazar selects con etiquetas legibles
         const selects = clonedDoc.querySelectorAll('select');
         selects.forEach((sel) => {
           const selectedText = sel.options[sel.selectedIndex]?.text || sel.value || '';
@@ -72,7 +89,7 @@ export async function exportPlanningToPdf(
           sel.parentNode?.replaceChild(div, sel);
         });
 
-        // Reemplazar inputs de texto con divs limpios
+        // 5. Reemplazar inputs de texto con divs limpios
         const inputs = clonedDoc.querySelectorAll<HTMLInputElement>('input[type="text"]');
         inputs.forEach((inp) => {
           const div = clonedDoc.createElement('div');
@@ -87,9 +104,7 @@ export async function exportPlanningToPdf(
       }
     });
 
-    const imgData = canvas.toDataURL('image/png');
-    
-    // Formato horizontal A4 (297mm x 210mm) ideal para planillas semanales de lunes a domingo
+    // Formato horizontal A4 (297mm x 210mm) ideal para microciclos de lunes a domingo
     const pdf = new jsPDF({
       orientation: 'landscape',
       unit: 'mm',
@@ -99,27 +114,63 @@ export async function exportPlanningToPdf(
     const pdfWidth = pdf.internal.pageSize.getWidth();
     const pdfHeight = pdf.internal.pageSize.getHeight();
 
-    // Dimensiones proporcionales manteniendo márgenes de 8mm
-    const margin = 8;
-    const contentWidth = pdfWidth - margin * 2;
-    const imgHeight = (canvas.height * contentWidth) / canvas.width;
+    const marginX = 8;
+    const marginY = 8;
+    const maxContentWidth = pdfWidth - marginX * 2;
+    const maxContentHeight = pdfHeight - marginY * 2;
 
-    if (imgHeight <= pdfHeight - margin * 2) {
-      // Entra en una sola página
-      pdf.addImage(imgData, 'PNG', margin, margin, contentWidth, imgHeight);
+    const canvasPageHeight = Math.floor(canvas.width * (maxContentHeight / maxContentWidth));
+
+    // Si entra en 1 página (tolerancia del 8% para acomodar microciclo)
+    if (canvas.height <= canvasPageHeight * 1.08) {
+      const imgRatio = canvas.width / canvas.height;
+      let renderWidth = maxContentWidth;
+      let renderHeight = renderWidth / imgRatio;
+
+      if (renderHeight > maxContentHeight) {
+        renderHeight = maxContentHeight;
+        renderWidth = renderHeight * imgRatio;
+      }
+
+      const posX = marginX + (maxContentWidth - renderWidth) / 2;
+      const posY = marginY;
+
+      const imgData = canvas.toDataURL('image/png');
+      pdf.addImage(imgData, 'PNG', posX, posY, renderWidth, renderHeight, undefined, 'FAST');
     } else {
-      // Multi-página si es muy larga
-      let heightLeft = imgHeight;
-      let position = margin;
+      // Paginación limpia por rebanado
+      const totalPages = Math.ceil(canvas.height / canvasPageHeight);
 
-      pdf.addImage(imgData, 'PNG', margin, position, contentWidth, imgHeight);
-      heightLeft -= (pdfHeight - margin * 2);
+      for (let p = 0; p < totalPages; p++) {
+        if (p > 0) pdf.addPage();
 
-      while (heightLeft > 0) {
-        position = heightLeft - imgHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, 'PNG', margin, position, contentWidth, imgHeight);
-        heightLeft -= pdfHeight;
+        const srcY = p * canvasPageHeight;
+        const srcH = Math.min(canvasPageHeight, canvas.height - srcY);
+
+        const sliceCanvas = document.createElement('canvas');
+        sliceCanvas.width = canvas.width;
+        sliceCanvas.height = srcH;
+        const sliceCtx = sliceCanvas.getContext('2d');
+
+        if (sliceCtx) {
+          sliceCtx.fillStyle = '#ffffff';
+          sliceCtx.fillRect(0, 0, sliceCanvas.width, sliceCanvas.height);
+          sliceCtx.drawImage(
+            canvas,
+            0,
+            srcY,
+            canvas.width,
+            srcH,
+            0,
+            0,
+            canvas.width,
+            srcH
+          );
+
+          const sliceData = sliceCanvas.toDataURL('image/png');
+          const sliceRenderHeight = (srcH * maxContentWidth) / canvas.width;
+          pdf.addImage(sliceData, 'PNG', marginX, marginY, maxContentWidth, sliceRenderHeight, undefined, 'FAST');
+        }
       }
     }
 

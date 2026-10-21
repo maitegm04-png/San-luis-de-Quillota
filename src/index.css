@@ -1,7 +1,31 @@
 @import "tailwindcss";
 
 @media print {
-  /* Ocultar elementos no imprimibles de interfaz */
+  /* ========================================================================= */
+  /* 1. CONFIGURACIÓN GLOBAL DE IMPRESIÓN Y PRESERVACIÓN DE COLOR              */
+  /* ========================================================================= */
+  *,
+  *::before,
+  *::after {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
+  html, body {
+    background-color: #ffffff !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: auto !important;
+    overflow: visible !important;
+  }
+
+  /* Ocultar elementos de interfaz no imprimibles */
   header,
   footer,
   nav,
@@ -11,24 +35,6 @@
   .print\:hidden,
   .no-print {
     display: none !important;
-  }
-
-  /* Configuración de página limpia y nítida */
-  body, html {
-    background-color: #ffffff !important;
-    background: #ffffff !important;
-    color: #000000 !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    width: 100% !important;
-    height: auto !important;
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
-  }
-
-  * {
-    box-shadow: none !important;
-    text-shadow: none !important;
   }
 
   /* Asegurar que textareas y campos expandan todo su texto completo */
@@ -44,7 +50,53 @@
     word-break: break-word !important;
   }
 
-  /* Aislamiento estricto: Cuando se imprime la Ficha de Jugador, SOLO se imprime la ficha */
+  /* ========================================================================= */
+  /* 2. LIBERACIÓN DE MODALES PARA FLUJO DE PÁGINA NORMAL (MULTI-PAGE FIX)     */
+  /* ========================================================================= */
+  /* Cuando un modal imprimible está abierto, desarmamos el fixed y scroll    */
+  /* para que el navegador pagine naturalmente sin cortar la hoja en 1 página */
+  .fixed.inset-0 {
+    position: static !important;
+    background: transparent !important;
+    backdrop-filter: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    display: block !important;
+    width: 100% !important;
+    height: auto !important;
+    inset: auto !important;
+    z-index: auto !important;
+  }
+
+  .relative.w-full.max-w-4xl,
+  .relative.w-full.max-w-3xl,
+  .relative.w-full {
+    max-width: 100% !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+
+  .max-h-\[82vh\],
+  .max-h-\[85vh\],
+  .overflow-y-auto,
+  .overflow-x-auto {
+    max-height: none !important;
+    overflow: visible !important;
+    height: auto !important;
+    background: transparent !important;
+    padding: 0 !important;
+  }
+
+  /* ========================================================================= */
+  /* 3. AISLAMIENTO DE DOCUMENTOS OFICIALES IMPRIMIBLES                        */
+  /* ========================================================================= */
+
+  /* --- FICHA OFICIAL DEL JUGADOR --- */
   body:has(#printable-player-ficha) * {
     visibility: hidden;
   }
@@ -53,37 +105,22 @@
     visibility: visible;
   }
   body:has(#printable-player-ficha) #printable-player-ficha {
-    position: absolute !important;
-    left: 0 !important;
-    top: 0 !important;
+    position: static !important;
     width: 100% !important;
     max-width: 100% !important;
-    margin: 0 !important;
-    padding: 5mm !important;
-    border: none !important;
-    box-shadow: none !important;
-  }
-
-  /* Aislamiento estricto: Cuando se imprime la Planificación Semanal, SOLO se imprime la planilla */
-  body:has(#printable-planning-area) * {
-    visibility: hidden;
-  }
-  body:has(#printable-planning-area) #printable-planning-area,
-  body:has(#printable-planning-area) #printable-planning-area * {
-    visibility: visible;
-  }
-  body:has(#printable-planning-area) #printable-planning-area {
-    position: absolute !important;
-    left: 0 !important;
-    top: 0 !important;
-    width: 100% !important;
-    margin: 0 !important;
+    margin: 0 auto !important;
     padding: 2mm !important;
     border: none !important;
     box-shadow: none !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+  }
+  body:has(#printable-player-ficha) #printable-player-ficha > div {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
   }
 
-  /* Aislamiento estricto: Cuando se imprime la Planilla de Citación, SOLO se imprime la citación */
+  /* --- PLANILLA DE CITACIÓN DE PARTIDO --- */
   body:has(#printable-citation-sheet) * {
     visibility: hidden;
   }
@@ -92,19 +129,107 @@
     visibility: visible;
   }
   body:has(#printable-citation-sheet) #printable-citation-sheet {
-    position: absolute !important;
-    left: 0 !important;
-    top: 0 !important;
+    position: static !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 auto !important;
+    padding: 2mm !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+  }
+
+  /* --- PLANIFICACIÓN SEMANAL (MICROCICLO HORIZONTAL) --- */
+  body:has(#printable-planning-area) * {
+    visibility: hidden;
+  }
+  body:has(#printable-planning-area) #printable-planning-area,
+  body:has(#printable-planning-area) #printable-planning-area * {
+    visibility: visible;
+  }
+  body:has(#printable-planning-area) #printable-planning-area {
+    position: static !important;
     width: 100% !important;
     max-width: 100% !important;
     margin: 0 !important;
-    padding: 5mm !important;
+    padding: 2mm !important;
     border: none !important;
     box-shadow: none !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    overflow: visible !important;
   }
 
+  /* --- TABLA NUTRICIONAL OFICIAL (5 COMPONENTES) --- */
+  body:has(#printable-nutrition-table) * {
+    visibility: hidden;
+  }
+  body:has(#printable-nutrition-table) #printable-nutrition-table,
+  body:has(#printable-nutrition-table) #printable-nutrition-table * {
+    visibility: visible;
+  }
+  body:has(#printable-nutrition-table) #printable-nutrition-table {
+    position: static !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 2mm !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    overflow: visible !important;
+  }
+  body:has(#printable-nutrition-table) table {
+    width: 100% !important;
+    color: #0f172a !important;
+  }
+  body:has(#printable-nutrition-table) tbody tr {
+    background-color: #ffffff !important;
+    color: #0f172a !important;
+  }
+  body:has(#printable-nutrition-table) td {
+    color: #0f172a !important;
+    border-color: #e2e8f0 !important;
+  }
+
+  /* --- ACTA Y PLANILLA OFICIAL DE PARTIDO --- */
+  body:has(#official-match-sheet) * {
+    visibility: hidden;
+  }
+  body:has(#official-match-sheet) #official-match-sheet,
+  body:has(#official-match-sheet) #official-match-sheet * {
+    visibility: visible;
+  }
+  body:has(#official-match-sheet) #official-match-sheet {
+    position: static !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 auto !important;
+    padding: 2mm !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+  }
+
+  /* ========================================================================= */
+  /* 4. CONFIGURACIÓN DE PÁGINA SEGÚN TIPO DE DOCUMENTO                       */
+  /* ========================================================================= */
   @page {
     margin: 6mm;
     size: auto;
+  }
+
+  /* Orientación apaisada automática para documentos anchos */
+  @page landscape-doc {
+    size: landscape;
+    margin: 5mm;
+  }
+
+  body:has(#printable-planning-area),
+  body:has(#printable-nutrition-table) {
+    page: landscape-doc;
   }
 }

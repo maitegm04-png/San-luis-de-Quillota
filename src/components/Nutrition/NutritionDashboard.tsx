@@ -32,6 +32,7 @@ import { PlayerModal } from '../PlayerDatabase/PlayerModal';
 import { PlayerFormModal } from '../PlayerDatabase/PlayerFormModal';
 import { generateSampleNutritionPdf } from '../../services/nutritionSamplePdfGenerator';
 import { generateOfficialAnthropometryPdf } from '../../services/nutritionOfficialTablePdfGenerator';
+import { SanLuisLogo } from '../Common/SanLuisLogo';
 
 type NutritionSubTab = 'table' | 'matrix' | 'evolution' | 'recent';
 
@@ -576,9 +577,35 @@ export const NutritionDashboard: React.FC = () => {
       {/* SUBTAB 0: TABLA OFICIAL ANTROPOMÉTRICA (Exact Layout from PDF Report) */}
       {activeSubTab === 'table' && (
         <div className="space-y-4">
-          <div className="bg-slate-950 rounded-2xl border border-slate-800 overflow-hidden shadow-2xl">
-            {/* Header matching Official SLQ PDF Report */}
-            <div className="p-4 sm:p-5 bg-gradient-to-r from-slate-950 via-slate-900 to-amber-950/30 border-b border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div
+            id="printable-nutrition-table"
+            className="bg-slate-950 rounded-2xl border border-slate-800 overflow-hidden shadow-2xl print:border-none print:shadow-none print:bg-white print:text-black print:p-0 print:m-0"
+          >
+            {/* Official Print Header (Only visible when printing) */}
+            <div className="hidden print:flex items-center justify-between p-4 pb-3 border-b-2 border-black mb-3 bg-white text-black">
+              <div className="flex items-center gap-3">
+                <SanLuisLogo className="w-14 h-16 drop-shadow shrink-0" />
+                <div>
+                  <h1 className="text-xl font-black uppercase tracking-tight text-black leading-tight">
+                    SAN LUIS DE QUILLOTA S.A.D.P.
+                  </h1>
+                  <p className="text-xs font-bold text-amber-600 uppercase tracking-wide">
+                    DEPARTAMENTO DE NUTRICIÓN Y RENDIMIENTO DEPORTIVO • FÚTBOL FORMATIVO
+                  </p>
+                  <p className="text-[11px] font-semibold text-slate-700">
+                    INFORME ANTROPOMÉTRICO OFICIAL (5 COMPONENTES) • {activeCategory === 'all' ? 'Todas las Categorías' : `Categoría ${activeCategory}`}
+                  </p>
+                </div>
+              </div>
+              <div className="text-right text-[11px] text-slate-700">
+                <p>Fecha Filtro: <strong className="text-black">{selectedDateFilter === 'all' ? 'Todas las Fechas' : selectedDateFilter}</strong></p>
+                <p>Total Evaluaciones: <strong className="text-black">{tableData.length} futbolistas</strong></p>
+                <p className="text-[10px] text-slate-500 mt-1 font-bold">Responsable: Nta. Cristian Fuentes Toledo</p>
+              </div>
+            </div>
+
+            {/* Header matching Official SLQ PDF Report (Hidden in print) */}
+            <div className="p-4 sm:p-5 bg-gradient-to-r from-slate-950 via-slate-900 to-amber-950/30 border-b border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3 print:hidden">
               <div>
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-amber-400 text-slate-950 shadow-sm">
@@ -626,29 +653,29 @@ export const NutritionDashboard: React.FC = () => {
             </div>
 
             {/* Table mimicking PDF report table with colors */}
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto print:overflow-visible">
               <table className="w-full text-left text-xs border-collapse">
-                <thead className="bg-slate-950 text-slate-300 text-[11px] font-bold uppercase border-b border-slate-800">
+                <thead className="bg-slate-950 text-slate-300 text-[11px] font-bold uppercase border-b border-slate-800 print:bg-slate-100 print:text-black print:border-black">
                   <tr>
-                    <th className="p-3 w-8 text-center text-slate-500">#</th>
+                    <th className="p-3 w-8 text-center text-slate-500 print:text-black">#</th>
                     <th className="p-3">Nombre paciente</th>
                     <th className="p-3 text-center">Edad</th>
                     <th className="p-3 text-center">Talla</th>
                     <th className="p-3 text-center">Peso</th>
-                    <th className="p-3 text-center bg-rose-950/30 text-rose-300 border-x border-slate-800/60" colSpan={2}>
+                    <th className="p-3 text-center bg-rose-950/30 text-rose-300 border-x border-slate-800/60 print:bg-rose-50 print:text-rose-900 print:border-slate-300" colSpan={2}>
                       M. Adiposa (% / kg)
                     </th>
-                    <th className="p-3 text-center bg-blue-950/30 text-blue-300 border-r border-slate-800/60" colSpan={2}>
+                    <th className="p-3 text-center bg-blue-950/30 text-blue-300 border-r border-slate-800/60 print:bg-blue-50 print:text-blue-900 print:border-slate-300" colSpan={2}>
                       M. Muscular (% / kg)
                     </th>
-                    <th className="p-3 text-center bg-amber-950/30 text-amber-300 border-r border-slate-800/60">
+                    <th className="p-3 text-center bg-amber-950/30 text-amber-300 border-r border-slate-800/60 print:bg-amber-50 print:text-amber-900 print:border-slate-300">
                       6 Pliegues
                     </th>
-                    <th className="p-3 text-center bg-emerald-950/30 text-emerald-300 border-r border-slate-800/60">
+                    <th className="p-3 text-center bg-emerald-950/30 text-emerald-300 border-r border-slate-800/60 print:bg-emerald-50 print:text-emerald-900 print:border-slate-300">
                       IMO
                     </th>
                     <th className="p-3 text-center">Semáforo</th>
-                    <th className="p-3 text-center">Acciones</th>
+                    <th className="p-3 text-center print:hidden">Acciones</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/80 bg-slate-900/50 font-mono text-xs">
@@ -772,7 +799,7 @@ export const NutritionDashboard: React.FC = () => {
                             <span>{row.statusClassification}</span>
                           </span>
                         </td>
-                        <td className="p-3 text-center font-sans">
+                        <td className="p-3 text-center font-sans print:hidden">
                           <div className="flex items-center justify-center gap-1.5">
                             <button
                               type="button"

@@ -19,7 +19,11 @@ import {
   Sparkles,
   CheckCircle2,
   Upload,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Shirt,
+  Hash,
+  RotateCcw,
+  Info
 } from 'lucide-react';
 
 interface CitationFormModalProps {
@@ -178,6 +182,37 @@ export const CitationFormModal: React.FC<CitationFormModalProps> = ({
       next[index] = { ...next[index], squadNumber: newNumber };
       return next;
     });
+  };
+
+  const handleUpdatePlayerDisplayName = (index: number, newName: string) => {
+    setSelectedPlayers((prev) => {
+      const next = [...prev];
+      next[index] = { ...next[index], displayName: newName.toUpperCase() };
+      return next;
+    });
+  };
+
+  // Re-number convocated players 1 to N sequentially
+  const handleRenumberSequential = () => {
+    setSelectedPlayers((prev) =>
+      prev.map((entry, idx) => ({
+        ...entry,
+        squadNumber: idx + 1,
+      }))
+    );
+  };
+
+  // Reset back to original database squad numbers
+  const handleResetToDatabaseNumbers = () => {
+    setSelectedPlayers((prev) =>
+      prev.map((entry) => {
+        const dbPlayer = players.find((p) => p.id === entry.playerId);
+        return {
+          ...entry,
+          squadNumber: dbPlayer ? dbPlayer.squadNumber : entry.squadNumber,
+        };
+      })
+    );
   };
 
   const handleRemovePlayerEntry = (index: number) => {
@@ -534,9 +569,11 @@ export const CitationFormModal: React.FC<CitationFormModalProps> = ({
 
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 max-h-48 overflow-y-auto p-2 bg-slate-950 rounded-xl border border-slate-800">
                 {categoryPlayers.map((p) => {
-                  const isSelected = selectedPlayers.some((sp) => sp.playerId === p.id);
+                  const selectedEntry = selectedPlayers.find((sp) => sp.playerId === p.id);
+                  const isSelected = !!selectedEntry;
                   const isInjured = p.status === 'Lesionado' || isPlayerInjured(p.id);
                   const posConfig = POSITION_LABELS[p.primaryPosition] || POSITION_LABELS['MC'];
+                  const isCustomNumber = selectedEntry && selectedEntry.squadNumber !== p.squadNumber;
 
                   return (
                     <button
@@ -554,7 +591,7 @@ export const CitationFormModal: React.FC<CitationFormModalProps> = ({
                     >
                       <div className="flex items-center gap-2 min-w-0">
                         {/* Photo thumbnail */}
-                        <div className="w-7 h-7 rounded-full bg-slate-800 border border-slate-600 overflow-hidden shrink-0 flex items-center justify-center">
+                        <div className="w-8 h-8 rounded-full bg-slate-800 border border-slate-600 overflow-hidden shrink-0 flex items-center justify-center">
                           {p.photoUrl ? (
                             <img src={p.photoUrl} alt={p.firstName} className="w-full h-full object-cover" />
                           ) : (
@@ -563,9 +600,21 @@ export const CitationFormModal: React.FC<CitationFormModalProps> = ({
                         </div>
                         <div className="truncate">
                           <p className="font-bold truncate text-[11px]">{p.nickname || p.firstName}</p>
-                          <span className={`text-[9px] px-1 py-0.2 rounded font-extrabold ${isSelected ? 'bg-slate-950 text-white' : posConfig.color}`}>
-                            {p.primaryPosition}
-                          </span>
+                          <div className="flex items-center gap-1 mt-0.5">
+                            <span className={`text-[9px] px-1 py-0.2 rounded font-extrabold ${isSelected ? 'bg-slate-950 text-white' : posConfig.color}`}>
+                              {p.primaryPosition}
+                            </span>
+                            {isSelected ? (
+                              <span className="text-[9px] font-black bg-slate-950 text-amber-300 px-1 py-0.2 rounded font-mono">
+                                Dorsal: #{selectedEntry.squadNumber}
+                                {isCustomNumber && '*'}
+                              </span>
+                            ) : (
+                              <span className="text-[9px] text-slate-500 font-mono">
+                                #{p.squadNumber}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
 
@@ -584,63 +633,146 @@ export const CitationFormModal: React.FC<CitationFormModalProps> = ({
               </div>
             </div>
 
-            {/* List of Convocated Players (clean, no rut, no condition, no signature) */}
+            {/* List of Convocated Players with Custom Match Dorsal inputs */}
             {selectedPlayers.length > 0 && (
-              <div className="border border-slate-800 rounded-xl overflow-hidden bg-slate-950">
-                <div className="p-2.5 bg-slate-900 border-b border-slate-800 flex justify-between items-center text-xs">
-                  <span className="font-bold text-slate-300">
-                    Nómina de Convocados ({selectedPlayers.length} futbolistas listos con su foto)
-                  </span>
-                  <span className="text-[10px] text-amber-400 font-bold uppercase">
-                    Se reflejará en la planilla PDF
-                  </span>
+              <div className="border border-slate-800 rounded-xl overflow-hidden bg-slate-950 shadow-lg">
+                <div className="p-3 bg-slate-900 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Shirt className="w-4 h-4 text-amber-400" />
+                      <span className="font-black text-white text-xs">
+                        Nómina de Convocados ({selectedPlayers.length} futbolistas listos con foto)
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Edita el <strong>dorsal de este partido</strong> directamente en cada casilla. No modificará el dorsal permanente en la base de datos.
+                    </p>
+                  </div>
+
+                  {/* Batch Numbering Actions */}
+                  <div className="flex items-center gap-1.5 self-end sm:self-auto flex-wrap">
+                    <button
+                      type="button"
+                      onClick={handleRenumberSequential}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-amber-300 rounded-lg text-[11px] font-bold border border-slate-700 transition-colors cursor-pointer"
+                      title="Asignar automáticamente dorsales correlativos 1, 2, 3... correlativos"
+                    >
+                      <Hash className="w-3 h-3" />
+                      <span>Numerar 1 al {selectedPlayers.length}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleResetToDatabaseNumbers}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg text-[11px] font-semibold border border-slate-700 transition-colors cursor-pointer"
+                      title="Restablecer los dorsales registrados originalmente en la base de datos"
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      <span>Restablecer a BD</span>
+                    </button>
+                  </div>
                 </div>
 
-                <div className="divide-y divide-slate-800/80 max-h-60 overflow-y-auto">
+                <div className="divide-y divide-slate-800/80 max-h-72 overflow-y-auto p-1">
                   {selectedPlayers.map((entry, idx) => {
                     const dbPlayer = players.find((pl) => pl.id === entry.playerId);
                     const photo = entry.photoUrl || dbPlayer?.photoUrl;
+                    const isCustomDorsal = dbPlayer && dbPlayer.squadNumber !== entry.squadNumber;
 
                     return (
-                      <div key={entry.playerId} className="p-2 flex items-center justify-between gap-3 text-xs hover:bg-slate-900/60">
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <span className="text-slate-500 font-mono w-4 text-center">{idx + 1}</span>
+                      <div
+                        key={entry.playerId}
+                        className={`p-2.5 flex items-center justify-between gap-3 text-xs rounded-lg transition-colors ${
+                          isCustomDorsal ? 'bg-amber-950/20 hover:bg-amber-950/30' : 'hover:bg-slate-900/60'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          <span className="text-slate-500 font-mono w-4 text-center font-bold text-xs">
+                            {idx + 1}
+                          </span>
 
-                          {/* Editable Squad Number */}
-                          <input
-                            type="number"
-                            value={entry.squadNumber}
-                            onChange={(e) => handleUpdatePlayerSquadNumber(idx, Number(e.target.value))}
-                            className="w-11 bg-slate-900 border border-slate-700 rounded p-1 text-center font-black text-amber-300"
-                            title="Dorsal"
-                          />
+                          {/* Editable Match Squad Number Input */}
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <div className="flex flex-col items-center">
+                              <span className="text-[9px] uppercase font-bold text-slate-400 leading-none mb-1">
+                                Dorsal Partido
+                              </span>
+                              <input
+                                type="text"
+                                inputMode="numeric"
+                                pattern="[0-9]*"
+                                value={entry.squadNumber ?? ''}
+                                onChange={(e) => {
+                                  const raw = e.target.value.replace(/[^0-9]/g, '');
+                                  const num = raw === '' ? 0 : parseInt(raw, 10);
+                                  handleUpdatePlayerSquadNumber(idx, num);
+                                }}
+                                className={`w-12 h-8 text-center font-black rounded-lg border-2 text-sm focus:outline-none transition-all ${
+                                  isCustomDorsal
+                                    ? 'bg-amber-400 text-slate-950 border-amber-300 font-black shadow-sm'
+                                    : 'bg-slate-900 text-amber-300 border-slate-700 focus:border-amber-400'
+                                }`}
+                                title="Escribe aquí el dorsal específico para este partido"
+                              />
+                            </div>
 
-                          {/* Player Photo */}
-                          <div className="w-8 h-8 rounded-full bg-slate-800 border border-slate-700 overflow-hidden shrink-0 flex items-center justify-center">
-                            {photo ? (
-                              <img src={photo} alt={entry.name} className="w-full h-full object-cover" />
-                            ) : (
-                              <span className="text-[10px] font-black text-amber-400">#{entry.squadNumber}</span>
+                            {/* Database reference badge */}
+                            {dbPlayer && (
+                              <div className="flex flex-col items-center justify-center">
+                                <span className="text-[9px] uppercase text-slate-500 leading-none mb-1">
+                                  Dorsal BD
+                                </span>
+                                <span
+                                  className={`text-[10px] px-1.5 py-1 rounded font-mono font-bold ${
+                                    isCustomDorsal
+                                      ? 'text-slate-400 bg-slate-900 border border-slate-800'
+                                      : 'text-slate-500 bg-slate-900/60'
+                                  }`}
+                                  title={`Dorsal en base de datos: #${dbPlayer.squadNumber}`}
+                                >
+                                  #{dbPlayer.squadNumber}
+                                </span>
+                              </div>
                             )}
                           </div>
 
-                          <div className="truncate">
-                            <p className="font-bold text-white text-xs truncate uppercase">
-                              {entry.displayName || entry.name}
-                            </p>
-                            <span className="text-[10px] text-slate-400 font-medium">
-                              {entry.name} • {entry.primaryPosition}
+                          {/* Player Photo */}
+                          <div className="w-9 h-9 rounded-full bg-slate-800 border border-slate-700 overflow-hidden shrink-0 flex items-center justify-center shadow-xs">
+                            {photo ? (
+                              <img src={photo} alt={entry.name} className="w-full h-full object-cover" />
+                            ) : (
+                              <span className="text-[10px] font-black text-amber-400">
+                                #{entry.squadNumber}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Player Names & Position */}
+                          <div className="truncate flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className="font-black text-white text-xs truncate uppercase">
+                                {entry.displayName || entry.name}
+                              </p>
+                              {isCustomDorsal && (
+                                <span className="text-[9px] font-black uppercase px-1.5 py-0.2 rounded bg-amber-400/20 text-amber-300 border border-amber-400/30 whitespace-nowrap">
+                                  Dorsal Modificado
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-[11px] text-slate-400 font-medium block truncate">
+                              {entry.name} • <span className="text-amber-300 font-semibold">{entry.primaryPosition}</span>
                             </span>
                           </div>
                         </div>
 
+                        {/* Remove Action */}
                         <button
                           type="button"
                           onClick={() => handleRemovePlayerEntry(idx)}
-                          className="p-1 text-slate-400 hover:text-rose-400 hover:bg-rose-950/40 rounded transition-colors"
+                          className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer shrink-0"
                           title="Quitar de citación"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
                     );
