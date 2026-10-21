@@ -126,7 +126,7 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({ player, onClick, onEdit 
         )}
 
         {/* Player Mini Bio Details */}
-        <div className="grid grid-cols-2 gap-2 text-xs text-slate-300 bg-slate-950/50 rounded-lg p-2.5 border border-slate-800/80 mb-3">
+        <div className="grid grid-cols-2 gap-2 text-xs text-slate-300 bg-slate-950/50 rounded-lg p-2.5 border border-slate-800/80 mb-2.5">
           <div>
             <span className="text-slate-500 text-[10px] block">Pie Dominante</span>
             <span className="font-semibold">{player.dominantFoot}</span>
@@ -136,6 +136,27 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({ player, onClick, onEdit 
             <span className="font-semibold">{player.heightCm} cm / {player.weightKg} kg</span>
           </div>
         </div>
+
+        {/* Nutritional Status Badge */}
+        {player.currentNutrition ? (
+          <div
+            className={`text-[10px] font-bold px-2 py-1 rounded-lg mb-2.5 flex items-center justify-between border ${
+              player.currentNutrition.trafficLight === 'green'
+                ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-300'
+                : player.currentNutrition.trafficLight === 'yellow'
+                ? 'bg-amber-950/40 border-amber-500/40 text-amber-300'
+                : 'bg-rose-950/40 border-rose-500/40 text-rose-300'
+            }`}
+          >
+            <span className="flex items-center gap-1 truncate">
+              <span>{player.currentNutrition.trafficLight === 'green' ? '🟢' : player.currentNutrition.trafficLight === 'yellow' ? '🟡' : '🔴'}</span>
+              <span className="truncate">Nutrición: {player.currentNutrition.statusClassification}</span>
+            </span>
+            <span className="font-mono shrink-0 ml-1">
+              {player.currentNutrition.bodyFatPercent !== undefined ? `${player.currentNutrition.bodyFatPercent}% Grasa` : `${player.currentNutrition.weightKg} kg`}
+            </span>
+          </div>
+        ) : null}
       </div>
 
       {/* Season Stats Summary */}

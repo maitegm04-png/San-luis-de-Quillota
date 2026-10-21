@@ -27,9 +27,28 @@ interface PlayerFichaPdfModalProps {
 }
 
 export const PlayerFichaPdfModal: React.FC<PlayerFichaPdfModalProps> = ({ player, onClose }) => {
-  const { injuries } = useFootball();
+  const { injuries, getPlayerNutritionalHistory } = useFootball();
   const printRef = useRef<HTMLDivElement>(null);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+
+  const nutritionalHistory = getPlayerNutritionalHistory(player.id);
+  const currentNutrition = player.currentNutrition || (nutritionalHistory[0] ? {
+    lastEvaluationDate: nutritionalHistory[0].date,
+    weightKg: nutritionalHistory[0].weightKg,
+    heightCm: nutritionalHistory[0].heightCm,
+    bmi: nutritionalHistory[0].bmi,
+    bodyFatPercent: nutritionalHistory[0].bodyFatPercent,
+    muscleMassPercent: nutritionalHistory[0].muscleMassPercent,
+    muscleMassKg: nutritionalHistory[0].muscleMassKg,
+    skinfoldSumMm: nutritionalHistory[0].skinfoldSumMm,
+    trafficLight: nutritionalHistory[0].trafficLight,
+    statusClassification: nutritionalHistory[0].statusClassification,
+    summary: nutritionalHistory[0].statusReason || nutritionalHistory[0].notes || '',
+    evaluationCount: nutritionalHistory.length,
+    target: nutritionalHistory[0].target,
+    nutritionistName: nutritionalHistory[0].nutritionistName,
+    recommendations: nutritionalHistory[0].recommendations,
+  } : undefined);
 
   const rawInjuries = [
     ...injuries.filter((i) => i.playerId === player.id),
@@ -447,10 +466,101 @@ export const PlayerFichaPdfModal: React.FC<PlayerFichaPdfModalProps> = ({ player
               </div>
             </div>
 
+            {/* 6. Situación Nutricional y Evaluaciones Antropométricas del Año */}
+            <div className="border border-slate-300 rounded-xl overflow-hidden mb-6">
+              <div className="bg-[#FFFF00] text-black font-black text-xs px-3 py-1.5 uppercase border-b border-black flex justify-between items-center">
+                <span>6. Situación Nutricional y Evaluaciones Antropométricas ({nutritionalHistory.length} en el año)</span>
+                {currentNutrition && (
+                  <span className={`text-[9px] px-2 py-0.5 rounded uppercase font-black ${
+                    currentNutrition.trafficLight === 'green'
+                      ? 'bg-emerald-600 text-white'
+                      : currentNutrition.trafficLight === 'yellow'
+                      ? 'bg-amber-600 text-white'
+                      : 'bg-rose-600 text-white'
+                  }`}>
+                    Estado Actual: {currentNutrition.statusClassification}
+                  </span>
+                )}
+              </div>
+              <div className="p-3 bg-white">
+                {currentNutrition ? (
+                  <div className="space-y-3">
+                    {/* Clean Table of Anthropometric Evaluations matching photo format */}
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-[10px] border-collapse">
+                        <thead>
+                          <tr className="bg-slate-100 text-slate-700 font-extrabold border-b border-slate-300 text-left">
+                            <th className="p-1.5">Fecha</th>
+                            <th className="p-1.5">Protocolo / Informe</th>
+                            <th className="p-1.5 text-center">Talla / Peso</th>
+                            <th className="p-1.5 text-center">M. Adiposa</th>
+                            <th className="p-1.5 text-center">M. Muscular</th>
+                            <th className="p-1.5 text-center">6 Pliegues</th>
+                            <th className="p-1.5 text-center">IMO</th>
+                            <th className="p-1.5 text-center">IMC</th>
+                            <th className="p-1.5 text-center">Semáforo</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(nutritionalHistory.length > 0 ? nutritionalHistory : [currentNutrition as any]).map((ev, idx) => (
+                            <tr key={ev.id || idx} className="border-b border-slate-200">
+                              <td className="p-1.5 font-mono text-slate-900 whitespace-nowrap font-bold">{ev.date || currentNutrition.lastEvaluationDate}</td>
+                              <td className="p-1.5 font-bold text-slate-800">{ev.periodName || 'Control Antropométrico'}</td>
+                              <td className="p-1.5 text-center font-bold text-slate-900">{ev.heightCm}cm / {ev.weightKg}kg</td>
+                              <td className="p-1.5 text-center font-black">
+                                <span className={
+                                  ev.bodyFatPercent && ev.bodyFatPercent <= 17.0
+                                    ? 'text-emerald-700'
+                                    : ev.bodyFatPercent && ev.bodyFatPercent <= 19.0
+                                    ? 'text-amber-700'
+                                    : 'text-rose-700'
+                                }>
+                                  {ev.bodyFatPercent !== undefined ? `${ev.bodyFatPercent}%` : '-'}
+                                </span>
+                                {ev.bodyFatKg !== undefined && <span className="block text-[8px] font-normal text-slate-500">{ev.bodyFatKg}kg</span>}
+                              </td>
+                              <td className="p-1.5 text-center text-blue-700 font-bold">
+                                {ev.muscleMassPercent !== undefined ? `${ev.muscleMassPercent}%` : '-'}
+                                {ev.muscleMassKg !== undefined && <span className="block text-[8px] font-normal text-slate-500">{ev.muscleMassKg}kg</span>}
+                              </td>
+                              <td className="p-1.5 text-center text-slate-700 font-bold">
+                                {ev.skinfoldSumMm ? `${ev.skinfoldSumMm} mm` : '-'}
+                              </td>
+                              <td className="p-1.5 text-center text-emerald-700 font-bold">
+                                {ev.imo !== undefined ? ev.imo.toFixed(2) : '-'}
+                              </td>
+                              <td className="p-1.5 text-center font-bold text-slate-800">
+                                {ev.bmi || currentNutrition.bmi}
+                              </td>
+                              <td className="p-1.5 text-center whitespace-nowrap">
+                                <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase ${
+                                  ev.trafficLight === 'green'
+                                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                    : ev.trafficLight === 'yellow'
+                                    ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                                    : 'bg-rose-100 text-rose-800 border border-rose-300'
+                                }`}>
+                                  {ev.trafficLight === 'green' ? '🟢' : ev.trafficLight === 'yellow' ? '🟡' : '🔴'} {ev.statusClassification}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-500 italic">
+                    Sin controles antropométricos registrados para este jugador en la temporada actual.
+                  </p>
+                )}
+              </div>
+            </div>
+
             {/* Notes / Observaciones */}
             <div className="border border-slate-300 rounded-xl overflow-hidden mb-8">
               <div className="bg-slate-100 text-slate-800 font-extrabold text-xs px-3 py-1.5 uppercase border-b border-slate-300">
-                6. Observaciones Técnicas y Disciplinarias
+                7. Observaciones Técnicas y Disciplinarias
               </div>
               <div className="p-3 bg-white text-xs text-slate-700 min-h-[50px] whitespace-pre-wrap">
                 {player.notes || 'Sin observaciones registradas por el cuerpo técnico.'}

@@ -13,7 +13,9 @@ import {
   MatchPhysicalReport,
   MatchGpsReport,
   WeeklyCheckInEntry,
-  WeeklyCheckOutEntry
+  WeeklyCheckOutEntry,
+  PlayerNutritionalEvaluation,
+  PlayerCurrentNutrition
 } from '../types/football';
 import { 
   FORMATIONS_SLOTS, 
@@ -24,7 +26,8 @@ import {
   INITIAL_PLAYERS, 
   INITIAL_STAFF_BY_CATEGORY,
   INITIAL_WEEKLY_CHECKINS,
-  INITIAL_WEEKLY_CHECKOUTS
+  INITIAL_WEEKLY_CHECKOUTS,
+  INITIAL_NUTRITIONAL_EVALUATIONS
 } from '../data/mockData';
 import { collection, doc, setDoc, deleteDoc, onSnapshot, writeBatch } from 'firebase/firestore';
 import { db } from '../firebase';
@@ -107,6 +110,14 @@ interface FootballContextType {
   updateWeeklyCheckOut: (id: string, entry: Partial<WeeklyCheckOutEntry>) => void;
   deleteWeeklyCheckOut: (id: string) => void;
 
+  // Nutritional Area & Anthropometric Evaluations
+  nutritionalEvaluations: PlayerNutritionalEvaluation[];
+  addNutritionalEvaluation: (evalData: Omit<PlayerNutritionalEvaluation, 'id' | 'createdAt'>) => string;
+  addNutritionalEvaluationsBatch: (evalsData: Omit<PlayerNutritionalEvaluation, 'id' | 'createdAt'>[]) => void;
+  updateNutritionalEvaluation: (id: string, evalData: Partial<PlayerNutritionalEvaluation>) => void;
+  deleteNutritionalEvaluation: (id: string) => void;
+  getPlayerNutritionalHistory: (playerId: string) => PlayerNutritionalEvaluation[];
+
   // Data management
   resetToDefaultData: () => void;
   exportDatabaseJson: () => void;
@@ -124,6 +135,7 @@ const STORAGE_KEY_INJURIES = 'san_luis_injuries_v2';
 const STORAGE_KEY_CITATIONS = 'san_luis_citations_v2';
 const STORAGE_KEY_CHECKINS = 'san_luis_checkins_v1';
 const STORAGE_KEY_CHECKOUTS = 'san_luis_checkouts_v1';
+const STORAGE_KEY_NUTRITION = 'san_luis_nutrition_evals_v1';
 
 export const FootballProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [players, setPlayers] = useState<Player[]>(() => {
@@ -181,6 +193,15 @@ export const FootballProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       return saved ? JSON.parse(saved) : INITIAL_WEEKLY_CHECKOUTS;
     } catch {
       return INITIAL_WEEKLY_CHECKOUTS;
+    }
+  });
+
+  const [nutritionalEvaluations, setNutritionalEvaluations] = useState<PlayerNutritionalEvaluation[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_NUTRITION);
+      return saved ? JSON.parse(saved) : INITIAL_NUTRITIONAL_EVALUATIONS;
+    } catch {
+      return INITIAL_NUTRITIONAL_EVALUATIONS;
     }
   });
 
@@ -373,6 +394,28 @@ export const FootballProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return () => unsub();
   }, []);
 
+  // Real-time Firestore sync for nutritional evaluations
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'nutritional_evaluations'), (snapshot) => {
+      if (!snapshot.empty) {
+        const cloudEvals: PlayerNutritionalEvaluation[] = [];
+        snapshot.forEach((d) => {
+          cloudEvals.push(d.data() as PlayerNutritionalEvaluation);
+        });
+        setNutritionalEvaluations(cloudEvals);
+      } else {
+        const batch = writeBatch(db);
+        INITIAL_NUTRITIONAL_EVALUATIONS.forEach((ev) => {
+          batch.set(doc(db, 'nutritional_evaluations', ev.id), ev);
+        });
+        batch.commit().catch(console.error);
+      }
+    }, (error) => {
+      console.warn('Firestore nutritional evaluations sync fallback', error);
+    });
+    return () => unsub();
+  }, []);
+
   // Sync to local storage as instant backup
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_PLAYERS, JSON.stringify(players));
@@ -409,6 +452,10 @@ export const FootballProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_CHECKOUTS, JSON.stringify(weeklyCheckOuts));
   }, [weeklyCheckOuts]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY_NUTRITION, JSON.stringify(nutritionalEvaluations));
+  }, [nutritionalEvaluations]);
 
   const setActiveCategory = (cat: string) => {
     setActiveCategoryState(cat);
@@ -1278,6 +1325,232 @@ export const FootballProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     deleteDoc(doc(db, 'checkouts', id)).catch(console.error);
   };
 
+  // Helper to recompute and persist a player's currentNutrition and history in state and Firestore
+  const updatePlayerNutritionState = (
+    playerId: string,
+    allEvals: PlayerNutritionalEvaluation[]
+  ) => {
+    const playerEvals = allEvals
+      .filter((e) => e.playerId === playerId)
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+    let currentNutrition: PlayerCurrentNutrition | undefined = undefined;
+    let latestWeight: number | undefined = undefined;
+    let latestHeight: number | undefined = undefined;
+
+    if (playerEvals.length > 0) {
+      const latest = playerEvals[0];
+      latestWeight = latest.weightKg;
+      latestHeight = latest.heightCm;
+      currentNutrition = {
+        lastEvaluationDate: latest.date,
+        age: latest.age,
+        weightKg: latest.weightKg,
+        heightCm: latest.heightCm,
+        bmi: latest.bmi,
+        bodyFatPercent: latest.bodyFatPercent,
+        bodyFatKg: latest.bodyFatKg,
+        muscleMassPercent: latest.muscleMassPercent,
+        muscleMassKg: latest.muscleMassKg,
+        skinfoldSumMm: latest.skinfoldSumMm,
+        imo: latest.imo,
+        trafficLight: latest.trafficLight,
+        statusClassification: latest.statusClassification,
+        summary: latest.statusReason || latest.notes || '',
+        evaluationCount: playerEvals.length,
+        target: latest.target,
+        nutritionistName: latest.nutritionistName,
+        recommendations: latest.recommendations,
+      };
+    }
+
+    setPlayers((prev) =>
+      prev.map((p) => {
+        if (p.id === playerId) {
+          return {
+            ...p,
+            weightKg: latestWeight || p.weightKg,
+            heightCm: latestHeight || p.heightCm,
+            currentNutrition,
+            nutritionalHistory: playerEvals,
+          };
+        }
+        return p;
+      })
+    );
+
+    // Save update to player's ficha in Firestore
+    try {
+      const playerUpdate: any = {
+        currentNutrition: currentNutrition || null,
+        nutritionalHistory: playerEvals.slice(0, 20),
+      };
+      if (latestWeight) playerUpdate.weightKg = latestWeight;
+      if (latestHeight) playerUpdate.heightCm = latestHeight;
+      setDoc(doc(db, 'players', playerId), cleanForFirestore(playerUpdate), { merge: true }).catch(console.error);
+    } catch (err) {
+      console.warn('Error syncing player nutrition to Firestore', err);
+    }
+  };
+
+  // Nutritional CRUD operations
+  const addNutritionalEvaluation = (
+    evalData: Omit<PlayerNutritionalEvaluation, 'id' | 'createdAt'>
+  ): string => {
+    const id = `nutri-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
+    const now = new Date().toISOString();
+    const newEval: PlayerNutritionalEvaluation = {
+      ...evalData,
+      id,
+      createdAt: now,
+    };
+
+    const nextEvals = [newEval, ...nutritionalEvaluations];
+    setNutritionalEvaluations(nextEvals);
+    setDoc(doc(db, 'nutritional_evaluations', id), cleanForFirestore(newEval)).catch(console.error);
+
+    // Automatically update the player's database profile (currentNutrition & history)
+    updatePlayerNutritionState(newEval.playerId, nextEvals);
+    return id;
+  };
+
+  const addNutritionalEvaluationsBatch = (
+    evalsData: Omit<PlayerNutritionalEvaluation, 'id' | 'createdAt'>[]
+  ) => {
+    const now = new Date().toISOString();
+    const newItems: PlayerNutritionalEvaluation[] = evalsData.map((data, idx) => ({
+      ...data,
+      id: `nutri-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 4)}`,
+      createdAt: now,
+    }));
+
+    const nextEvals = [...newItems, ...nutritionalEvaluations];
+    setNutritionalEvaluations(nextEvals);
+
+    try {
+      const batch = writeBatch(db);
+      newItems.forEach((item) => {
+        batch.set(doc(db, 'nutritional_evaluations', item.id), cleanForFirestore(item));
+      });
+      batch.commit().catch(console.error);
+    } catch (err) {
+      console.warn('Batch nutritional evaluations Firestore error', err);
+    }
+
+    // Update each affected player's ficha
+    const affectedPlayerIds = Array.from(new Set(newItems.map((n) => n.playerId)));
+    affectedPlayerIds.forEach((pid) => {
+      updatePlayerNutritionState(pid, nextEvals);
+    });
+  };
+
+  const updateNutritionalEvaluation = (
+    id: string,
+    partial: Partial<PlayerNutritionalEvaluation>
+  ) => {
+    const nextEvals = nutritionalEvaluations.map((e) => (e.id === id ? { ...e, ...partial } : e));
+    setNutritionalEvaluations(nextEvals);
+    setDoc(doc(db, 'nutritional_evaluations', id), cleanForFirestore(partial), { merge: true }).catch(console.error);
+
+    const targetEval = nextEvals.find((e) => e.id === id);
+    if (targetEval) {
+      updatePlayerNutritionState(targetEval.playerId, nextEvals);
+    }
+  };
+
+  const deleteNutritionalEvaluation = (id: string) => {
+    const targetEval = nutritionalEvaluations.find((e) => e.id === id || e.id.trim() === id.trim());
+    const nextEvals = nutritionalEvaluations.filter((e) => e.id !== id && e.id.trim() !== id.trim());
+    setNutritionalEvaluations(nextEvals);
+    deleteDoc(doc(db, 'nutritional_evaluations', id)).catch(console.error);
+
+    try {
+      localStorage.setItem(STORAGE_KEY_NUTRITION, JSON.stringify(nextEvals));
+    } catch {}
+
+    const targetPlayerId = targetEval?.playerId;
+    if (targetPlayerId) {
+      updatePlayerNutritionState(targetPlayerId, nextEvals);
+    }
+  };
+
+  const getPlayerNutritionalHistory = (playerId: string): PlayerNutritionalEvaluation[] => {
+    return nutritionalEvaluations
+      .filter((e) => e.playerId === playerId)
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  };
+
+  // Synchronize initial nutrition into players state
+  useEffect(() => {
+    if (players.length > 0) {
+      const evalsByPlayer: Record<string, PlayerNutritionalEvaluation[]> = {};
+      nutritionalEvaluations.forEach((ev) => {
+        if (!evalsByPlayer[ev.playerId]) evalsByPlayer[ev.playerId] = [];
+        evalsByPlayer[ev.playerId].push(ev);
+      });
+
+      let changed = false;
+      const updatedPlayers = players.map((p) => {
+        const pEvals = evalsByPlayer[p.id];
+        if (!pEvals || pEvals.length === 0) {
+          if (p.currentNutrition || (p.nutritionalHistory && p.nutritionalHistory.length > 0)) {
+            changed = true;
+            return {
+              ...p,
+              currentNutrition: undefined,
+              nutritionalHistory: [],
+            };
+          }
+          return p;
+        }
+        const sorted = [...pEvals].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        const latest = sorted[0];
+
+        // Check if player doesn't have currentNutrition or if it differs
+        if (
+          !p.currentNutrition ||
+          p.currentNutrition.lastEvaluationDate !== latest.date ||
+          p.currentNutrition.evaluationCount !== sorted.length ||
+          p.currentNutrition.bodyFatPercent !== latest.bodyFatPercent ||
+          p.currentNutrition.muscleMassPercent !== latest.muscleMassPercent
+        ) {
+          changed = true;
+          return {
+            ...p,
+            weightKg: latest.weightKg || p.weightKg,
+            heightCm: latest.heightCm || p.heightCm,
+            currentNutrition: {
+              lastEvaluationDate: latest.date,
+              age: latest.age,
+              weightKg: latest.weightKg,
+              heightCm: latest.heightCm,
+              bmi: latest.bmi,
+              bodyFatPercent: latest.bodyFatPercent,
+              bodyFatKg: latest.bodyFatKg,
+              muscleMassPercent: latest.muscleMassPercent,
+              muscleMassKg: latest.muscleMassKg,
+              skinfoldSumMm: latest.skinfoldSumMm,
+              imo: latest.imo,
+              trafficLight: latest.trafficLight,
+              statusClassification: latest.statusClassification,
+              summary: latest.statusReason || latest.notes || '',
+              evaluationCount: sorted.length,
+              target: latest.target,
+              nutritionistName: latest.nutritionistName,
+              recommendations: latest.recommendations,
+            },
+            nutritionalHistory: sorted,
+          };
+        }
+        return p;
+      });
+
+      if (changed) {
+        setPlayers(updatedPlayers);
+      }
+    }
+  }, [nutritionalEvaluations, players.length]);
+
   // Backup & Restore
   const resetToDefaultData = () => {
     setPlayers(INITIAL_PLAYERS);
@@ -1286,6 +1559,7 @@ export const FootballProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setCitations(INITIAL_CITATIONS);
     setWeeklyCheckIns(INITIAL_WEEKLY_CHECKINS);
     setWeeklyCheckOuts(INITIAL_WEEKLY_CHECKOUTS);
+    setNutritionalEvaluations(INITIAL_NUTRITIONAL_EVALUATIONS);
     setClubInfo(INITIAL_CLUB_INFO);
     setActiveCategoryState('Sub 14');
     setCategoryStaff(INITIAL_STAFF_BY_CATEGORY);
@@ -1296,6 +1570,7 @@ export const FootballProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     localStorage.removeItem(STORAGE_KEY_CITATIONS);
     localStorage.removeItem(STORAGE_KEY_CHECKINS);
     localStorage.removeItem(STORAGE_KEY_CHECKOUTS);
+    localStorage.removeItem(STORAGE_KEY_NUTRITION);
     localStorage.removeItem(STORAGE_KEY_CLUB);
     localStorage.removeItem(STORAGE_KEY_ACTIVE_CATEGORY);
     localStorage.removeItem(STORAGE_KEY_STAFF_BY_CAT);
@@ -1313,6 +1588,9 @@ export const FootballProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       });
       INITIAL_CITATIONS.forEach((cit) => {
         batch.set(doc(db, 'citations', cit.id), cit);
+      });
+      INITIAL_NUTRITIONAL_EVALUATIONS.forEach((ev) => {
+        batch.set(doc(db, 'nutritional_evaluations', ev.id), ev);
       });
       batch.set(doc(db, 'club', 'info'), INITIAL_CLUB_INFO);
       Object.entries(INITIAL_STAFF_BY_CATEGORY).forEach(([cat, staff]) => {
@@ -1343,6 +1621,7 @@ export const FootballProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       citations,
       weeklyCheckIns,
       weeklyCheckOuts,
+      nutritionalEvaluations,
       categoryStaff,
       activeCategory,
       users: usersData
@@ -1393,6 +1672,12 @@ export const FootballProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
       if (data.weeklyCheckOuts && Array.isArray(data.weeklyCheckOuts)) {
         setWeeklyCheckOuts(data.weeklyCheckOuts);
+      }
+      if (data.nutritionalEvaluations && Array.isArray(data.nutritionalEvaluations)) {
+        setNutritionalEvaluations(data.nutritionalEvaluations);
+        data.nutritionalEvaluations.forEach((ev: PlayerNutritionalEvaluation) => {
+          if (ev.id) batch.set(doc(db, 'nutritional_evaluations', ev.id), cleanForFirestore(ev));
+        });
       }
       if (data.clubInfo && typeof data.clubInfo === 'object') {
         setClubInfo(data.clubInfo);
@@ -1478,6 +1763,12 @@ export const FootballProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         addWeeklyCheckOutsBatch,
         updateWeeklyCheckOut,
         deleteWeeklyCheckOut,
+        nutritionalEvaluations,
+        addNutritionalEvaluation,
+        addNutritionalEvaluationsBatch,
+        updateNutritionalEvaluation,
+        deleteNutritionalEvaluation,
+        getPlayerNutritionalHistory,
         resetToDefaultData,
         exportDatabaseJson,
         importDatabaseJson,

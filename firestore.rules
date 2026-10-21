@@ -55,5 +55,10 @@ service cloud.firestore {
     match /test/{docId} {
       allow read, write: if true;
     }
+
+    // Nutritional evaluations collection
+    match /nutritional_evaluations/{evalId} {
+      allow read, write: if true;
+    }
   }
 }

@@ -95,6 +95,63 @@ export interface Player {
   attributes: PlayerAttributes;
   stats: PlayerStats;
   injuries?: PlayerInjury[];
+  currentNutrition?: PlayerCurrentNutrition;
+  nutritionalHistory?: PlayerNutritionalEvaluation[];
+}
+
+export type NutritionTrafficLight = 'green' | 'yellow' | 'red';
+export type NutritionStatusType = 'Óptimo' | 'Bueno' | 'Aceptable' | 'Atención' | 'Crítico';
+
+export interface PlayerNutritionalEvaluation {
+  id: string;
+  playerId: string;
+  playerName?: string;
+  playerSquadNumber?: number;
+  category: string;
+  date: string; // YYYY-MM-DD
+  periodName?: string; // ej: "Control N° 1 - Enero", "Evaluación Marzo", "Control Pretemporada"
+  age?: number; // Edad al momento de la evaluación
+  weightKg: number;
+  heightCm: number;
+  bmi: number; // Índice de Masa Corporal
+  bodyFatPercent?: number; // % Masa Adiposa
+  bodyFatKg?: number; // Masa Adiposa en Kg
+  muscleMassPercent?: number; // % Masa Muscular
+  muscleMassKg?: number; // Masa Muscular en Kg
+  skinfoldSumMm?: number; // Sumatoria de 6 pliegues en mm
+  imo?: number; // Índice Músculo/Óseo (IMO)
+  visceralFat?: number; // Nivel de grasa visceral
+  hydrationPercent?: number; // % Hidratación
+  trafficLight: NutritionTrafficLight; // 'green' (buena/óptima) | 'yellow' (alerta/seguimiento) | 'red' (mala/atención)
+  statusClassification: NutritionStatusType; // Clasificación: Óptimo, Bueno, Aceptable, Atención, Crítico
+  statusReason?: string; // Diagnóstico resumido (ej: "Dentro de rango objetivo para competición")
+  target?: string; // Meta: "Bajar grasa 1.5%", "Ganancia muscular", "Mantener"
+  nutritionistName?: string; // Profesional nutricionista a cargo (ej: "Nta. Cristian Fuentes Toledo")
+  notes?: string; // Observaciones del informe
+  recommendations?: string; // Pauta alimentaria y sugerencias
+  sourcePdfFileName?: string; // Nombre del archivo PDF original si fue cargado
+  createdAt: string;
+}
+
+export interface PlayerCurrentNutrition {
+  lastEvaluationDate: string;
+  age?: number;
+  weightKg: number;
+  heightCm: number;
+  bmi: number;
+  bodyFatPercent?: number;
+  bodyFatKg?: number;
+  muscleMassPercent?: number;
+  muscleMassKg?: number;
+  skinfoldSumMm?: number;
+  imo?: number;
+  trafficLight: NutritionTrafficLight;
+  statusClassification: NutritionStatusType;
+  summary: string;
+  evaluationCount: number;
+  target?: string;
+  nutritionistName?: string;
+  recommendations?: string;
 }
 
 export interface CitationPlayerEntry {

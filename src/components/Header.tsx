@@ -17,14 +17,15 @@ import {
   ClipboardList,
   Activity,
   AlertTriangle,
-  Dumbbell
+  Dumbbell,
+  Scale
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { getAllowedCategories } from '../types/auth';
 import { SanLuisLogo } from './Common/SanLuisLogo';
 import { FirebaseQuotaBadge } from './Common/FirebaseQuotaBadge';
 
-export type ActiveTab = 'matches' | 'citations' | 'players' | 'injuries' | 'wellness' | 'tactics' | 'stats' | 'planning';
+export type ActiveTab = 'matches' | 'citations' | 'players' | 'injuries' | 'wellness' | 'nutrition' | 'tactics' | 'stats' | 'planning';
 
 interface HeaderProps {
   activeTab: ActiveTab;
@@ -43,7 +44,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenSettings,
   onOpenUsers,
 }) => {
-  const { clubInfo, exportDatabaseJson, importDatabaseJson, matches, activeCategory, setActiveCategory, getCategoryStaff, injuries, citations } = useFootball();
+  const { clubInfo, exportDatabaseJson, importDatabaseJson, matches, activeCategory, setActiveCategory, getCategoryStaff, injuries, citations, nutritionalEvaluations } = useFootball();
   const { currentUser, logout } = useAuth();
 
   const isCoordinator = currentUser?.role === 'Coordinador General' || currentUser?.category === 'Todas';
@@ -391,6 +392,23 @@ export const Header: React.FC<HeaderProps> = ({
               activeTab === 'wellness' ? 'bg-amber-950 text-amber-200' : 'bg-amber-500/20 text-amber-300 border border-amber-400/30'
             }`}>
               Check-in/out
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('nutrition')}
+            className={`flex items-center gap-2 px-3.5 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all whitespace-nowrap cursor-pointer ${
+              activeTab === 'nutrition'
+                ? 'bg-amber-400 text-slate-950 font-black shadow-md shadow-amber-950/40'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+            }`}
+          >
+            <Scale className="w-4 h-4" />
+            <span>Área Nutricional</span>
+            <span className={`text-[10px] font-black px-1.5 py-0.2 rounded-full ${
+              activeTab === 'nutrition' ? 'bg-amber-950 text-amber-200' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/40'
+            }`}>
+              {nutritionalEvaluations.filter((ev) => activeCategory === 'all' || ev.category === activeCategory).length}
             </span>
           </button>
 

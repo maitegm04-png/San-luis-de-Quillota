@@ -12,6 +12,7 @@ import { WeeklyPlanningDashboard } from './components/Planning/WeeklyPlanningDas
 import { CitationsDashboard } from './components/Citations/CitationsDashboard';
 import { InjuriesDashboard } from './components/Injuries/InjuriesDashboard';
 import { WeeklyPhysicalDashboard } from './components/PhysicalArea/WeeklyPhysicalDashboard';
+import { NutritionDashboard } from './components/Nutrition/NutritionDashboard';
 import { ClubSettingsModal } from './components/ClubSettingsModal';
 import { LoginScreen } from './components/Auth/LoginScreen';
 import { UserManagementModal } from './components/Auth/UserManagementModal';
@@ -75,6 +76,10 @@ function FootballApp() {
 
         {activeTab === 'wellness' && (
           <WeeklyPhysicalDashboard />
+        )}
+
+        {activeTab === 'nutrition' && (
+          <NutritionDashboard />
         )}
 
         {activeTab === 'tactics' && (

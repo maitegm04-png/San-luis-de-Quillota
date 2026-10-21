@@ -17,10 +17,16 @@ import {
   Trash2,
   Trophy,
   Plus,
-  Stethoscope
+  Stethoscope,
+  Scale,
+  FileUp,
+  Download
 } from 'lucide-react';
 import { PlayerFichaPdfModal } from './PlayerFichaPdfModal';
 import { InjuryFormModal } from '../Injuries/InjuryFormModal';
+import { NutritionPdfUploadModal } from '../Nutrition/NutritionPdfUploadModal';
+import { NutritionManualModal } from '../Nutrition/NutritionManualModal';
+import { NutritionHistoryModal } from '../Nutrition/NutritionHistoryModal';
 
 interface PlayerModalProps {
   player: Player | null;
@@ -29,10 +35,14 @@ interface PlayerModalProps {
 }
 
 export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose, onEdit }) => {
-  const { deletePlayer, matches, injuries, dischargeInjury } = useFootball();
+  const { deletePlayer, matches, injuries, dischargeInjury, getPlayerNutritionalHistory } = useFootball();
   const [showFichaPdf, setShowFichaPdf] = useState(false);
   const [isInjuryFormOpen, setIsInjuryFormOpen] = useState(false);
   const [injuryToEdit, setInjuryToEdit] = useState<PlayerInjury | null>(null);
+  const [isNutritionPdfOpen, setIsNutritionPdfOpen] = useState(false);
+  const [isNutritionManualOpen, setIsNutritionManualOpen] = useState(false);
+  const [isNutritionHistoryOpen, setIsNutritionHistoryOpen] = useState(false);
+  const [selectedNutritionDate, setSelectedNutritionDate] = useState<string | null>(null);
 
   if (!player) return null;
 
@@ -53,6 +63,28 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose, onEdi
   const activeInjury = playerInjuries.find(
     (i) => i.status === 'Lesionado' || i.status === 'En Recuperación' || i.status === 'Activa'
   );
+
+  const playerNutritionalHistory = getPlayerNutritionalHistory(player.id);
+  const currentNutrition = player.currentNutrition || (playerNutritionalHistory.length > 0 ? {
+    lastEvaluationDate: playerNutritionalHistory[0].date,
+    age: playerNutritionalHistory[0].age,
+    weightKg: playerNutritionalHistory[0].weightKg,
+    heightCm: playerNutritionalHistory[0].heightCm,
+    bmi: playerNutritionalHistory[0].bmi,
+    bodyFatPercent: playerNutritionalHistory[0].bodyFatPercent,
+    bodyFatKg: playerNutritionalHistory[0].bodyFatKg,
+    muscleMassPercent: playerNutritionalHistory[0].muscleMassPercent,
+    muscleMassKg: playerNutritionalHistory[0].muscleMassKg,
+    skinfoldSumMm: playerNutritionalHistory[0].skinfoldSumMm,
+    imo: playerNutritionalHistory[0].imo,
+    trafficLight: playerNutritionalHistory[0].trafficLight,
+    statusClassification: playerNutritionalHistory[0].statusClassification,
+    summary: playerNutritionalHistory[0].statusReason || playerNutritionalHistory[0].notes || '',
+    evaluationCount: playerNutritionalHistory.length,
+    target: playerNutritionalHistory[0].target,
+    nutritionistName: playerNutritionalHistory[0].nutritionistName,
+    recommendations: playerNutritionalHistory[0].recommendations,
+  } : undefined);
 
   const posConfig = POSITION_LABELS[player.primaryPosition] || POSITION_LABELS['MC'];
 
@@ -396,6 +428,215 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose, onEdi
             )}
           </div>
 
+          {/* SITUACIÓN ACTUAL NUTRICIONAL Y EVALUACIONES DEL AÑO */}
+          <div className="pt-2 border-t border-slate-800">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                <Scale className="w-3.5 h-3.5 text-amber-400" />
+                <span>Situación Actual Nutricional y Evaluaciones ({playerNutritionalHistory.length})</span>
+              </h3>
+
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setIsNutritionPdfOpen(true)}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-amber-300 hover:text-white bg-amber-400/10 hover:bg-amber-400/20 border border-amber-400/30 rounded-lg transition-colors cursor-pointer"
+                >
+                  <FileUp className="w-3.5 h-3.5" />
+                  <span>Subir PDF</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsNutritionManualOpen(true)}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-emerald-300 hover:text-white bg-emerald-950/60 hover:bg-emerald-900 border border-emerald-800/80 rounded-lg transition-colors cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Nueva Medición</span>
+                </button>
+
+                {playerNutritionalHistory.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setIsNutritionHistoryOpen(true)}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition-colors cursor-pointer"
+                  >
+                    <span>Ver Todo el Año</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {currentNutrition ? (
+              <div className="space-y-3">
+                {/* Control Date Selector if multiple evaluations exist */}
+                {playerNutritionalHistory.length > 1 && (
+                  <div className="flex items-center justify-between gap-2 bg-slate-950/70 p-2.5 rounded-xl border border-slate-800 text-xs">
+                    <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                      <Calendar className="w-3.5 h-3.5 text-amber-400" />
+                      Fecha de Control:
+                    </span>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {playerNutritionalHistory.map((ev, i) => (
+                        <button
+                          key={ev.id || i}
+                          type="button"
+                          onClick={() => setSelectedNutritionDate(ev.date)}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                            (selectedNutritionDate === ev.date || (!selectedNutritionDate && i === 0))
+                              ? 'bg-amber-400 text-slate-950 font-black shadow'
+                              : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                          }`}
+                        >
+                          {ev.date} {i === 0 ? '(Último)' : ''}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Status Semaphore Banner without diagnosis text */}
+                {(() => {
+                  const activeEval = (selectedNutritionDate
+                    ? playerNutritionalHistory.find((e) => e.date === selectedNutritionDate)
+                    : null) || currentNutrition;
+
+                  const tLight = activeEval.trafficLight || 'green';
+                  const sClass = activeEval.statusClassification || 'Óptimo';
+                  const evalDate = ('date' in activeEval ? activeEval.date : activeEval.lastEvaluationDate) || '2026-10-08';
+
+                  return (
+                    <>
+                      <div
+                        className={`p-3.5 rounded-xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs ${
+                          tLight === 'green'
+                            ? 'bg-emerald-950/30 border-emerald-500/50 text-emerald-200'
+                            : tLight === 'yellow'
+                            ? 'bg-amber-950/30 border-amber-500/50 text-amber-200'
+                            : 'bg-rose-950/30 border-rose-500/50 text-rose-200'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div
+                            className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg font-black shrink-0 shadow ${
+                              tLight === 'green'
+                                ? 'bg-emerald-500 text-slate-950'
+                                : tLight === 'yellow'
+                                ? 'bg-amber-400 text-slate-950'
+                                : 'bg-rose-500 text-white'
+                            }`}
+                          >
+                            {tLight === 'green' ? '🟢' : tLight === 'yellow' ? '🟡' : '🔴'}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <strong className="text-white text-sm">
+                                Estado Nutricional: {sClass}
+                              </strong>
+                              <span
+                                className={`text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-wider ${
+                                  tLight === 'green'
+                                    ? 'bg-emerald-800 text-emerald-100'
+                                    : tLight === 'yellow'
+                                    ? 'bg-amber-900 text-amber-100'
+                                    : 'bg-rose-900 text-rose-100'
+                                }`}
+                              >
+                                {tLight === 'green' ? 'Óptimo / En Rango' : tLight === 'yellow' ? 'En Seguimiento' : 'Atención Requerida'}
+                              </span>
+                            </div>
+                            <span className="text-[11px] text-slate-400 block mt-0.5">
+                              Reporte Antropométrico Oficial San Luis de Quillota
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="text-right text-[11px] shrink-0 self-end sm:self-auto">
+                          <span className="text-slate-400 block">Fecha de evaluación:</span>
+                          <strong className="text-white font-mono">{evalDate}</strong>
+                        </div>
+                      </div>
+
+                      {/* Clean 5-Components Metrics Grid (Exact Photo Format - No Duplication) */}
+                      <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 text-center text-xs">
+                        <div className="bg-slate-950/80 p-2.5 rounded-xl border border-slate-800">
+                          <span className="text-[10px] text-slate-400 block font-semibold">Talla / Peso</span>
+                          <span className="text-sm font-black text-white">{activeEval.heightCm} cm</span>
+                          <span className="text-[11px] font-bold text-slate-300 block">{activeEval.weightKg} kg</span>
+                        </div>
+                        <div className="bg-slate-950/80 p-2.5 rounded-xl border border-slate-800">
+                          <span className="text-[10px] text-slate-400 block font-semibold">M. Adiposa</span>
+                          <span
+                            className={`text-sm font-black ${
+                              activeEval.bodyFatPercent && activeEval.bodyFatPercent <= 17.0
+                                ? 'text-emerald-400'
+                                : activeEval.bodyFatPercent && activeEval.bodyFatPercent <= 19.0
+                                ? 'text-amber-300'
+                                : 'text-rose-400'
+                            }`}
+                          >
+                            {activeEval.bodyFatPercent !== undefined ? `${activeEval.bodyFatPercent}%` : '-'}
+                          </span>
+                          <span className="text-[10px] text-slate-400 block">
+                            {activeEval.bodyFatKg !== undefined ? `${activeEval.bodyFatKg} kg` : ''}
+                          </span>
+                        </div>
+                        <div className="bg-slate-950/80 p-2.5 rounded-xl border border-slate-800">
+                          <span className="text-[10px] text-slate-400 block font-semibold">M. Muscular</span>
+                          <span className="text-sm font-black text-blue-400">
+                            {activeEval.muscleMassPercent !== undefined ? `${activeEval.muscleMassPercent}%` : '-'}
+                          </span>
+                          <span className="text-[10px] text-slate-400 block">
+                            {activeEval.muscleMassKg !== undefined ? `${activeEval.muscleMassKg} kg` : ''}
+                          </span>
+                        </div>
+                        <div className="bg-slate-950/80 p-2.5 rounded-xl border border-slate-800">
+                          <span className="text-[10px] text-slate-400 block font-semibold">6 Pliegues</span>
+                          <span className={`text-sm font-black ${
+                            activeEval.skinfoldSumMm && activeEval.skinfoldSumMm <= 36.0
+                              ? 'text-emerald-400'
+                              : activeEval.skinfoldSumMm && activeEval.skinfoldSumMm <= 48.0
+                              ? 'text-amber-300'
+                              : 'text-rose-400'
+                          }`}>
+                            {activeEval.skinfoldSumMm ? `${activeEval.skinfoldSumMm} mm` : '-'}
+                          </span>
+                          <span className="text-[10px] text-slate-400 block">ISAK</span>
+                        </div>
+                        <div className="bg-slate-950/80 p-2.5 rounded-xl border border-slate-800">
+                          <span className="text-[10px] text-slate-400 block font-semibold">IMO</span>
+                          <span className="text-sm font-black text-emerald-300">
+                            {activeEval.imo !== undefined ? activeEval.imo.toFixed(2) : '-'}
+                          </span>
+                          <span className="text-[10px] text-slate-400 block">Músculo/Óseo</span>
+                        </div>
+                        <div className="bg-slate-950/80 p-2.5 rounded-xl border border-slate-800">
+                          <span className="text-[10px] text-slate-400 block font-semibold">IMC</span>
+                          <span className="text-sm font-black text-amber-300">{activeEval.bmi}</span>
+                          <span className="text-[10px] text-slate-400 block">kg/m²</span>
+                        </div>
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>
+            ) : (
+              <div className="p-4 bg-slate-950 rounded-xl border border-slate-800 text-xs text-slate-400 flex flex-col sm:flex-row items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <Scale className="w-4 h-4 text-slate-500 shrink-0" />
+                  <span>Sin evaluación nutricional registrada en la ficha. Sube el informe en PDF o ingresa los datos antropométricos.</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsNutritionPdfOpen(true)}
+                  className="px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold rounded-lg text-xs transition-colors shrink-0 cursor-pointer"
+                >
+                  Subir PDF del Jugador
+                </button>
+              </div>
+            )}
+          </div>
+
           {/* MEDICAL & INJURY HISTORY SECTION ("que se reflejen en su ficha") */}
           <div className="pt-2 border-t border-slate-800">
             <div className="flex items-center justify-between mb-3">
@@ -549,6 +790,29 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose, onEdi
             setIsInjuryFormOpen(false);
             setInjuryToEdit(null);
           }}
+        />
+      )}
+
+      {isNutritionPdfOpen && (
+        <NutritionPdfUploadModal
+          initialPlayerId={player.id}
+          onClose={() => setIsNutritionPdfOpen(false)}
+        />
+      )}
+
+      {isNutritionManualOpen && (
+        <NutritionManualModal
+          initialPlayerId={player.id}
+          onClose={() => setIsNutritionManualOpen(false)}
+        />
+      )}
+
+      {isNutritionHistoryOpen && (
+        <NutritionHistoryModal
+          player={player}
+          onClose={() => setIsNutritionHistoryOpen(false)}
+          onOpenNewEvaluation={() => setIsNutritionManualOpen(true)}
+          onOpenUploadPdf={() => setIsNutritionPdfOpen(true)}
         />
       )}
     </div>

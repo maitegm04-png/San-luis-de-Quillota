@@ -334,6 +334,7 @@ export const PlayerList: React.FC<PlayerListProps> = ({ onOpenNewPlayer }) => {
                   <th className="py-3 px-4">Posición</th>
                   <th className="py-3 px-4">Categoría</th>
                   <th className="py-3 px-4">Estado</th>
+                  <th className="py-3 px-4 text-center">Nutrición</th>
                   <th className="py-3 px-4 text-center">PJ</th>
                   <th className="py-3 px-4 text-center">Minutos</th>
                   <th className="py-3 px-4 text-center">Goles</th>
@@ -392,6 +393,25 @@ export const PlayerList: React.FC<PlayerListProps> = ({ onOpenNewPlayer }) => {
                         }`}>
                           {p.status}
                         </span>
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        {p.currentNutrition ? (
+                          <span
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                              p.currentNutrition.trafficLight === 'green'
+                                ? 'bg-emerald-950 text-emerald-400 border-emerald-800'
+                                : p.currentNutrition.trafficLight === 'yellow'
+                                ? 'bg-amber-950 text-amber-400 border-amber-800'
+                                : 'bg-rose-950 text-rose-400 border-rose-800'
+                            }`}
+                            title={`${p.currentNutrition.statusClassification} • ${p.currentNutrition.bodyFatPercent !== undefined ? `${p.currentNutrition.bodyFatPercent}% grasa` : ''}`}
+                          >
+                            <span>{p.currentNutrition.trafficLight === 'green' ? '🟢' : p.currentNutrition.trafficLight === 'yellow' ? '🟡' : '🔴'}</span>
+                            <span>{p.currentNutrition.bodyFatPercent !== undefined ? `${p.currentNutrition.bodyFatPercent}%` : p.currentNutrition.statusClassification}</span>
+                          </span>
+                        ) : (
+                          <span className="text-slate-600 text-[10px]">-</span>
+                        )}
                       </td>
                       <td className="py-3 px-4 text-center font-bold text-white">{p.stats.matchesPlayed}</td>
                       <td className="py-3 px-4 text-center">{p.stats.minutesPlayed}'</td>
