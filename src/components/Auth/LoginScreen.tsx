@@ -11,7 +11,8 @@ import {
   User, 
   Briefcase, 
   Lock,
-  Sparkles
+  Sparkles,
+  Database
 } from 'lucide-react';
 
 const ROLE_OPTIONS: UserRole[] = [
@@ -29,7 +30,7 @@ interface LoginScreenProps {
 }
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
-  const { login, registerUser, users, isAuthReady } = useAuth();
+  const { login, registerUser, users, isAuthReady, loginAsPreset } = useAuth();
 
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [identifier, setIdentifier] = useState('');
@@ -250,6 +251,52 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
               <LogIn className="w-4 h-4" />
               <span>{isSubmitting ? 'Verificando con la nube...' : 'Entrar al Sistema'}</span>
             </button>
+
+            {/* Acceso Rápido Oficial para Jefatura Técnica y Coordinación */}
+            <div className="pt-3 border-t border-slate-800 space-y-2">
+              <span className="text-[10px] text-slate-400 uppercase font-black tracking-wider block text-center">
+                Acceso Directo Oficial • Cantera San Luis
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    loginAsPreset('jefe_tecnico');
+                    if (onLoginSuccess) onLoginSuccess('Todas');
+                  }}
+                  className="p-2.5 bg-slate-950 hover:bg-slate-800/80 border border-amber-500/40 rounded-xl text-left transition-all hover:scale-[1.01] cursor-pointer"
+                >
+                  <span className="text-[10px] text-amber-400 font-extrabold uppercase block">Jefe Técnico</span>
+                  <span className="text-xs font-bold text-white block">Fernando Guajardo</span>
+                  <span className="text-[9px] text-slate-400 block">Jefatura Fútbol Formativo</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    loginAsPreset('coordinadora');
+                    if (onLoginSuccess) onLoginSuccess('Todas');
+                  }}
+                  className="p-2.5 bg-slate-950 hover:bg-slate-800/80 border border-emerald-500/40 rounded-xl text-left transition-all hover:scale-[1.01] cursor-pointer"
+                >
+                  <span className="text-[10px] text-emerald-400 font-extrabold uppercase block">Coordinadora</span>
+                  <span className="text-xs font-bold text-white block">Maite González</span>
+                  <span className="text-[9px] text-slate-400 block">Coordinación Cantera</span>
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  loginAsPreset('invitado');
+                  if (onLoginSuccess) onLoginSuccess('Todas');
+                }}
+                className="w-full py-2 px-3 bg-slate-800/60 hover:bg-slate-800 border border-slate-700 rounded-xl text-xs font-bold text-slate-300 hover:text-white flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <Database className="w-3.5 h-3.5 text-amber-400" />
+                <span>Explorar Base de Datos Completa (Acceso Libre)</span>
+              </button>
+            </div>
           </form>
         )}
 

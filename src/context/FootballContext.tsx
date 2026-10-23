@@ -244,7 +244,10 @@ export const FootballProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         snapshot.forEach((d) => {
           cloudPlayers.push(d.data() as Player);
         });
-        setPlayers(cloudPlayers);
+        const existingIds = new Set(cloudPlayers.map((p) => p.id));
+        const missing = INITIAL_PLAYERS.filter((p) => !existingIds.has(p.id));
+        const merged = missing.length > 0 ? [...cloudPlayers, ...missing] : cloudPlayers;
+        setPlayers(merged);
       } else {
         // Seed initial players on first run
         const batch = writeBatch(db);
@@ -252,6 +255,7 @@ export const FootballProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           batch.set(doc(db, 'players', p.id), p);
         });
         batch.commit().catch(console.error);
+        setPlayers(INITIAL_PLAYERS);
       }
     }, (error) => {
       console.warn('Firestore players sync fallback to cache', error);

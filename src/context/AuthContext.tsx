@@ -11,6 +11,7 @@ interface AuthContextType {
   isAuthReady: boolean;
   login: (identifier: string, password?: string) => Promise<{ success: boolean; error?: string }>;
   quickLogin: (userId: string) => void;
+  loginAsPreset: (preset: 'jefe_tecnico' | 'coordinadora' | 'invitado') => void;
   registerUser: (newUser: Omit<UserAccount, 'id' | 'createdAt' | 'lastLogin'>) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   deleteUser: (userId: string) => Promise<{ success: boolean; error?: string }>;
@@ -221,6 +222,62 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const loginAsPreset = (preset: 'jefe_tecnico' | 'coordinadora' | 'invitado') => {
+    let presetUser: UserAccount;
+    const now = new Date().toISOString();
+
+    if (preset === 'jefe_tecnico') {
+      presetUser = {
+        id: 'usr-jefe-tecnico-guajardo',
+        name: 'Fernando Guajardo',
+        email: 'fernando.guajardo@sanluis.cl',
+        role: 'Coordinador General',
+        category: 'Todas',
+        avatarColor: 'bg-amber-500',
+        createdAt: now,
+        lastLogin: now,
+      };
+    } else if (preset === 'coordinadora') {
+      presetUser = {
+        id: 'usr-coord-maite-gonzalez',
+        name: 'Maite González',
+        email: 'maitegm04@gmail.com',
+        role: 'Coordinador General',
+        category: 'Todas',
+        avatarColor: 'bg-emerald-600',
+        createdAt: now,
+        lastLogin: now,
+      };
+    } else {
+      presetUser = {
+        id: 'usr-consulta-general',
+        name: 'Cuerpo Técnico Canarios',
+        email: 'cantera@sanluis.cl',
+        role: 'Coordinador General',
+        category: 'Todas',
+        avatarColor: 'bg-blue-600',
+        createdAt: now,
+        lastLogin: now,
+      };
+    }
+
+    setCurrentUser(presetUser);
+    setUsers((prev) => {
+      const exists = prev.find((u) => u.id === presetUser.id || (Boolean(u.email) && u.email.toLowerCase() === presetUser.email.toLowerCase()));
+      if (exists) {
+        return prev.map((u) => (u.id === exists.id ? { ...exists, lastLogin: now } : u));
+      }
+      return [...prev, presetUser];
+    });
+
+    try {
+      const sanitized = cleanForFirestore(presetUser);
+      setDoc(doc(db, 'users', presetUser.id), sanitized, { merge: true }).catch(console.warn);
+    } catch {
+      // ignore
+    }
+  };
+
   const registerUser = async (
     newUser: Omit<UserAccount, 'id' | 'createdAt' | 'lastLogin'>
   ): Promise<{ success: boolean; error?: string }> => {
@@ -352,6 +409,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isAuthReady,
         login,
         quickLogin,
+        loginAsPreset,
         registerUser,
         logout,
         deleteUser,
