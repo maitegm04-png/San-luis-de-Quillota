@@ -7,7 +7,7 @@ import {
   DAYS_OF_WEEK 
 } from '../types/planning';
 
-// Calculate dates for a specific week of the year
+// Calculate all 7 dates for a specific week of the year from Monday to Sunday (Lunes a Domingo)
 export function getWeekDates(year: number, weekNumber: number): { key: DayOfWeek; label: string; dateStr: string; displayDate: string }[] {
   // Find Monday of the specified ISO week
   const simple = new Date(Date.UTC(year, 0, 1 + (weekNumber - 1) * 7));
@@ -40,7 +40,7 @@ export function getWeekDates(year: number, weekNumber: number): { key: DayOfWeek
   });
 }
 
-// Current ISO week number
+// Current ISO week number based on today's real date
 export function getCurrentWeekNumber(): { year: number; week: number } {
   const now = new Date();
   const target = new Date(now.valueOf());
@@ -58,7 +58,7 @@ export function getCurrentWeekNumber(): { year: number; week: number } {
 export function createEmptyWeeklyPlan(category: string, year: number, weekNumber: number): WeeklyCategoryPlan {
   const weekDates = getWeekDates(year, weekNumber);
   const startDate = weekDates[0].dateStr;
-  const endDate = weekDates[6].dateStr;
+  const endDate = weekDates[weekDates.length - 1].dateStr;
 
   const planId = `plan-${category.replace(/\s+/g, '_')}-${year}-W${String(weekNumber).padStart(2, '0')}`;
 

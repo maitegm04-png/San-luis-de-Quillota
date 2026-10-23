@@ -23,6 +23,8 @@ import {
   Download
 } from 'lucide-react';
 import { PlayerFichaPdfModal } from './PlayerFichaPdfModal';
+import { PlayerProjectionSection } from './PlayerProjectionSection';
+import { getPlayerProjection, PROJECTION_LEVEL_MAP } from '../../data/projectionData';
 import { InjuryFormModal } from '../Injuries/InjuryFormModal';
 import { NutritionPdfUploadModal } from '../Nutrition/NutritionPdfUploadModal';
 import { NutritionManualModal } from '../Nutrition/NutritionManualModal';
@@ -87,6 +89,8 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose, onEdi
   } : undefined);
 
   const posConfig = POSITION_LABELS[player.primaryPosition] || POSITION_LABELS['MC'];
+  const playerProjection = getPlayerProjection(player);
+  const projectionLevelDef = PROJECTION_LEVEL_MAP[playerProjection.currentLevelId] || PROJECTION_LEVEL_MAP['nivel_4'];
 
   // Calculate age
   const calculateAge = (birthDateString: string) => {
@@ -175,6 +179,13 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose, onEdi
                   )}
                   <span className="text-xs text-emerald-400 bg-emerald-950 px-2 py-0.5 rounded border border-emerald-800">
                     {player.category}
+                  </span>
+                  <span
+                    className={`text-xs font-bold px-2 py-0.5 rounded border flex items-center gap-1.5 ${projectionLevelDef.badgeBg} ${projectionLevelDef.badgeText} ${projectionLevelDef.borderColor}`}
+                    title={projectionLevelDef.fullLabel}
+                  >
+                    <span className={`w-1.5 h-1.5 rounded-full ${projectionLevelDef.dotColor}`} />
+                    <span>{projectionLevelDef.code} • {projectionLevelDef.title}</span>
                   </span>
                 </div>
                 <h2 className="text-2xl font-black text-white tracking-tight">
@@ -291,6 +302,9 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({ player, onClose, onEdi
               <span className="text-sm font-bold text-white">{player.weightKg} kg</span>
             </div>
           </div>
+
+          {/* Nivel de Proyección al Primer Equipo */}
+          <PlayerProjectionSection player={player} />
 
           {/* Season Stats Cards */}
           <div>

@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { DominantFoot, Player, PlayerStatus, Position } from '../../types/football';
+import { DominantFoot, Player, PlayerStatus, Position, ProjectionLevelId, PlayerFirstTeamProjection } from '../../types/football';
 import { useFootball } from '../../context/FootballContext';
 import { useAuth } from '../../context/AuthContext';
 import { getAllowedCategories } from '../../types/auth';
 import { CLUB_CATEGORIES } from '../../types/football';
-import { X, Save, Shield, Camera, Upload, Trash2, Image as ImageIcon } from 'lucide-react';
+import { X, Save, Shield, Camera, Upload, Trash2, Image as ImageIcon, TrendingUp, Target } from 'lucide-react';
 import { compressImageForPlayer } from '../../services/firebaseQuotaGuard';
+import { PROJECTION_LEVELS, PROJECTION_LEVEL_MAP, getPlayerProjection } from '../../data/projectionData';
 
 interface PlayerFormModalProps {
   playerToEdit?: Player | null;
@@ -63,6 +64,17 @@ export const PlayerFormModal: React.FC<PlayerFormModalProps> = ({ playerToEdit, 
   const [avatarColor, setAvatarColor] = useState<string>(playerToEdit?.avatarColor || '#10b981');
   const [photoUrl, setPhotoUrl] = useState<string>(playerToEdit?.photoUrl || '');
   const [isCompressingPhoto, setIsCompressingPhoto] = useState<boolean>(false);
+
+  const initialProjection = playerToEdit ? getPlayerProjection(playerToEdit) : undefined;
+  const [projectionLevelId, setProjectionLevelId] = useState<ProjectionLevelId>(
+    initialProjection?.currentLevelId || 'nivel_4'
+  );
+  const [projectionObservations, setProjectionObservations] = useState<string>(
+    initialProjection?.technicalObservations || ''
+  );
+  const [projectionObjectives, setProjectionObjectives] = useState<string>(
+    initialProjection?.individualImprovementObjectives || ''
+  );
 
   const handlePhotoFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -140,6 +152,41 @@ export const PlayerFormModal: React.FC<PlayerFormModalProps> = ({ playerToEdit, 
           physical: Number(physical) || 78,
           goalkeeping: primaryPosition === 'POR' ? (Number(goalkeeping) || 80) : undefined,
         },
+        firstTeamProjection: (() => {
+          const selectedProjDef = PROJECTION_LEVEL_MAP[projectionLevelId] || PROJECTION_LEVEL_MAP['nivel_4'];
+          const isLevelChanged = initialProjection && initialProjection.currentLevelId !== projectionLevelId;
+          const historyEntry = {
+            id: `proj-${Date.now()}`,
+            previousLevelId: initialProjection?.currentLevelId,
+            previousLevelLabel: initialProjection?.currentLevelLabel,
+            newLevelId: projectionLevelId,
+            newLevelLabel: selectedProjDef.fullLabel,
+            date: new Date().toISOString().slice(0, 10),
+            evaluatorName: currentUser?.name ? `${currentUser.name} (${currentUser.role || 'Cuerpo Técnico'})` : 'Fernando Guajardo (Jefe Técnico)',
+            evaluatorRole: 'Jefatura Fútbol Formativo',
+            technicalObservations: projectionObservations.trim() || undefined,
+            individualImprovementObjectives: projectionObjectives.trim() || undefined,
+            nextReviewDate: initialProjection?.nextReviewDate || new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+            createdAt: new Date().toISOString(),
+          };
+
+          return {
+            currentLevelId: projectionLevelId,
+            currentLevelLabel: selectedProjDef.fullLabel,
+            timeframe: selectedProjDef.timeframe,
+            evaluationDate: isLevelChanged || !initialProjection ? new Date().toISOString().slice(0, 10) : initialProjection.evaluationDate,
+            evaluatorName: isLevelChanged || !initialProjection
+              ? (currentUser?.name ? `${currentUser.name} (${currentUser.role || 'Cuerpo Técnico'})` : 'Fernando Guajardo (Jefe Técnico)')
+              : initialProjection.evaluatorName,
+            evaluatorRole: 'Jefatura Fútbol Formativo',
+            nextReviewDate: initialProjection?.nextReviewDate || new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+            technicalObservations: projectionObservations.trim() || undefined,
+            individualImprovementObjectives: projectionObjectives.trim() || undefined,
+            history: isLevelChanged
+              ? [historyEntry, ...(initialProjection?.history || [])]
+              : (initialProjection?.history || [historyEntry]),
+          };
+        })(),
       };
 
       if (playerToEdit) {
@@ -498,6 +545,77 @@ export const PlayerFormModal: React.FC<PlayerFormModalProps> = ({ playerToEdit, 
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-emerald-500"
+                />
+              </div>
+            </div>
+
+            {/* Nivel de Proyección al Primer Equipo */}
+            <div className="bg-slate-950/80 p-4 rounded-xl border border-amber-500/30 space-y-3">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                <span className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <TrendingUp className="w-4 h-4" />
+                  <span>Nivel de Proyección al Primer Equipo</span>
+                </span>
+                <span className="text-[10px] text-slate-400">Jefatura Técnica Cantera</span>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Clasificación de Proyección
+                </label>
+                <select
+                  value={projectionLevelId}
+                  onChange={(e) => setProjectionLevelId(e.target.value as ProjectionLevelId)}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white font-semibold focus:outline-emerald-500 cursor-pointer"
+                >
+                  {PROJECTION_LEVELS.map((lvl) => (
+                    <option key={lvl.id} value={lvl.id} className="bg-slate-900 text-white">
+                      {lvl.fullLabel} (Plazo: {lvl.timeframe})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Criterion description box */}
+              {(() => {
+                const lvlDef = PROJECTION_LEVEL_MAP[projectionLevelId];
+                return (
+                  <div className={`p-2.5 rounded-lg border text-xs ${lvlDef.chipBg} ${lvlDef.borderColor} ${lvlDef.badgeText} space-y-1`}>
+                    <div className="flex items-center justify-between font-bold text-[11px]">
+                      <span>{lvlDef.title}</span>
+                      <span className="text-amber-300">Plazo: {lvlDef.timeframe}</span>
+                    </div>
+                    <p className="text-[10px] text-slate-300 leading-relaxed font-normal">
+                      {lvlDef.description}
+                    </p>
+                  </div>
+                );
+              })()}
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Observaciones Técnicas (Justificación de la clasificación)
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="Justificación del cuerpo técnico sobre el potencial y madurez deportiva..."
+                  value={projectionObservations}
+                  onChange={(e) => setProjectionObservations(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1 flex items-center gap-1">
+                  <Target className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Objetivos de Mejora Individuales (Técnicos, Tácticos, Físicos, Nutricionales o Psicológicos)</span>
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="Aspectos específicos a desarrollar por el canterano en los próximos ciclos..."
+                  value={projectionObjectives}
+                  onChange={(e) => setProjectionObjectives(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-emerald-500"
                 />
               </div>
             </div>

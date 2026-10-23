@@ -4,6 +4,7 @@ import { POSITION_LABELS } from '../../data/mockData';
 import { SanLuisLogo } from '../Common/SanLuisLogo';
 import { exportPlayerFichaToPdf, calculatePlayerAge, calculatePlayerOverall } from '../../services/playerPdfGenerator';
 import { useFootball } from '../../context/FootballContext';
+import { getPlayerProjection, PROJECTION_LEVEL_MAP } from '../../data/projectionData';
 import { 
   X, 
   Download, 
@@ -18,7 +19,10 @@ import {
   Award,
   CheckCircle2,
   AlertCircle,
-  Clock
+  Clock,
+  TrendingUp,
+  Target,
+  UserCheck
 } from 'lucide-react';
 
 interface PlayerFichaPdfModalProps {
@@ -27,9 +31,14 @@ interface PlayerFichaPdfModalProps {
 }
 
 export const PlayerFichaPdfModal: React.FC<PlayerFichaPdfModalProps> = ({ player, onClose }) => {
-  const { injuries, getPlayerNutritionalHistory } = useFootball();
+  const { injuries, getPlayerNutritionalHistory, getCategoryStaff } = useFootball();
   const printRef = useRef<HTMLDivElement>(null);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+
+  const categoryStaff = getCategoryStaff(player.category);
+  const coachName = categoryStaff?.coach || 'Director Técnico';
+  const projection = getPlayerProjection(player);
+  const projLevelDef = PROJECTION_LEVEL_MAP[projection.currentLevelId] || PROJECTION_LEVEL_MAP['nivel_4'];
 
   const nutritionalHistory = getPlayerNutritionalHistory(player.id);
   const currentNutrition = player.currentNutrition || (nutritionalHistory[0] ? {
@@ -148,10 +157,15 @@ export const PlayerFichaPdfModal: React.FC<PlayerFichaPdfModalProps> = ({ player
           <div
             id="printable-player-ficha"
             ref={printRef}
-            className="bg-white text-slate-900 rounded-xl p-6 sm:p-8 shadow-xl border border-slate-300 max-w-3xl mx-auto font-sans print:shadow-none print:border-none print:p-0 print:m-0"
+            className="max-w-3xl mx-auto space-y-6 font-sans"
           >
-            {/* Header / Club Identity Banner */}
-            <div className="border-b-2 border-black pb-4 mb-4">
+            {/* PÁGINA 1: PERFIL, BIOMETRÍA, ATRIBUTOS Y RENDIMIENTO */}
+            <div
+              id="ficha-page-1"
+              className="bg-white text-slate-900 rounded-xl p-6 sm:p-8 shadow-xl border border-slate-300 print:shadow-none print:border-none print:p-0 print:m-0"
+            >
+              {/* Header / Club Identity Banner */}
+              <div className="border-b-2 border-black pb-4 mb-4">
               <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
                   <SanLuisLogo className="w-16 h-18 shrink-0 drop-shadow" />
@@ -231,6 +245,13 @@ export const PlayerFichaPdfModal: React.FC<PlayerFichaPdfModalProps> = ({ player
                       : 'bg-rose-100 text-rose-800 font-black'
                   }`}>
                     {player.status}
+                  </span>
+                </div>
+
+                <div className="mt-1.5 text-[10px] font-bold text-slate-700 flex items-center justify-center gap-1">
+                  <span>Proyección 1° Eq:</span>
+                  <span className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase ${projLevelDef.badgeBg} ${projLevelDef.badgeText} border ${projLevelDef.borderColor}`}>
+                    {projLevelDef.code} • {projLevelDef.timeframe}
                   </span>
                 </div>
               </div>
@@ -389,6 +410,31 @@ export const PlayerFichaPdfModal: React.FC<PlayerFichaPdfModalProps> = ({ player
                     </tr>
                   </tbody>
                 </table>
+              </div>
+            </div>
+          </div>
+
+          {/* PÁGINA 2: HISTORIAL MÉDICO, SITUACIÓN NUTRICIONAL Y FIRMAS OFICIALES */}
+          <div
+            id="ficha-page-2"
+            className="bg-white text-slate-900 rounded-xl p-6 sm:p-8 shadow-xl border border-slate-300 print:shadow-none print:border-none print:p-0 print:m-0"
+          >
+            {/* Header Resumido Página 2 */}
+            <div className="border-b-2 border-black pb-3 mb-5 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <SanLuisLogo className="w-12 h-14 shrink-0 drop-shadow" />
+                <div>
+                  <h2 className="text-base font-black text-black tracking-tight uppercase leading-tight">
+                    San Luis de Quillota S.A.D.P.
+                  </h2>
+                  <p className="text-[10px] font-bold text-amber-600 uppercase">
+                    Ficha Médica y Antropométrica • {player.firstName} {player.lastName} (#{player.squadNumber}) • {player.category}
+                  </p>
+                </div>
+              </div>
+              <div className="text-right text-[10px] font-bold text-slate-600">
+                <span className="block font-black text-slate-900 text-xs">PÁGINA 2 DE 2</span>
+                <span>Temporada 2026</span>
               </div>
             </div>
 
@@ -558,12 +604,58 @@ export const PlayerFichaPdfModal: React.FC<PlayerFichaPdfModalProps> = ({ player
               </div>
             </div>
 
-            {/* Notes / Observaciones */}
-            <div className="border border-slate-300 rounded-xl overflow-hidden mb-8">
-              <div className="bg-slate-100 text-slate-800 font-extrabold text-xs px-3 py-1.5 uppercase border-b border-slate-300">
-                7. Observaciones Técnicas y Disciplinarias
+            {/* Nivel de Proyección al Primer Equipo */}
+            <div className="border border-slate-300 rounded-xl overflow-hidden mb-4">
+              <div className="bg-[#FFFF00] text-black font-black text-xs px-3 py-1.5 uppercase border-b border-black flex items-center justify-between">
+                <span>7. Nivel de Proyección al Primer Equipo</span>
+                <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-black text-[#FFFF00]">
+                  {projLevelDef.code} • Plazo: {projLevelDef.timeframe}
+                </span>
               </div>
-              <div className="p-3 bg-white text-xs text-slate-700 min-h-[50px] whitespace-pre-wrap">
+              <div className="p-3 bg-white space-y-2 text-xs text-slate-800">
+                <div className="flex items-center justify-between flex-wrap gap-2 pb-1.5 border-b border-slate-200">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-black text-slate-900 text-xs">{projLevelDef.fullLabel}</span>
+                  </div>
+                  <div className="text-[10px] text-slate-500 font-semibold flex items-center gap-2.5">
+                    <span>Evaluador: <strong className="text-slate-800">{projection.evaluatorName || 'Fernando Guajardo (Jefe Técnico)'}</strong></span>
+                    <span>Fecha: <strong className="text-slate-800">{projection.evaluationDate || '-'}</strong></span>
+                    <span>Próx. Revisión: <strong className="text-amber-800">{projection.nextReviewDate || '-'}</strong></span>
+                  </div>
+                </div>
+
+                <div className="text-[10px] text-slate-600 bg-slate-50 p-2 rounded-lg border border-slate-200">
+                  <strong className="text-slate-900">Criterio Institucional: </strong>{projLevelDef.description}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-0.5">
+                  <div className="bg-slate-50 p-2 rounded-lg border border-slate-200">
+                    <span className="text-[10px] text-slate-600 uppercase font-bold block mb-0.5">
+                      Justificación / Observaciones Técnicas:
+                    </span>
+                    <p className="text-slate-800 leading-relaxed text-[10px] whitespace-pre-wrap">
+                      {projection.technicalObservations || 'Sin observaciones registradas.'}
+                    </p>
+                  </div>
+
+                  <div className="bg-slate-50 p-2 rounded-lg border border-slate-200">
+                    <span className="text-[10px] text-amber-800 uppercase font-bold block mb-0.5">
+                      Objetivos de Mejora Individuales:
+                    </span>
+                    <p className="text-slate-800 leading-relaxed text-[10px] whitespace-pre-wrap">
+                      {projection.individualImprovementObjectives || 'Sin objetivos específicos registrados.'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Notes / Observaciones */}
+            <div className="border border-slate-300 rounded-xl overflow-hidden mb-6">
+              <div className="bg-slate-100 text-slate-800 font-extrabold text-xs px-3 py-1.5 uppercase border-b border-slate-300">
+                8. Observaciones Técnicas y Disciplinarias
+              </div>
+              <div className="p-3 bg-white text-xs text-slate-700 min-h-[40px] whitespace-pre-wrap">
                 {player.notes || 'Sin observaciones registradas por el cuerpo técnico.'}
               </div>
             </div>
@@ -572,18 +664,21 @@ export const PlayerFichaPdfModal: React.FC<PlayerFichaPdfModalProps> = ({ player
             <div className="pt-6 border-t-2 border-slate-300 grid grid-cols-3 gap-6 text-center text-[10px] text-slate-600">
               <div>
                 <div className="border-b border-slate-400 h-10 mb-1" />
-                <strong className="block text-slate-900 uppercase">Director Técnico</strong>
-                <span>Cuerpo Técnico {player.category}</span>
+                <span className="text-[9px] text-slate-500 uppercase tracking-wider block font-semibold">Director Técnico</span>
+                <strong className="block text-slate-900 text-[11px] uppercase mt-0.5">{coachName}</strong>
+                <span className="text-[9px] text-slate-500 block">Cuerpo Técnico {player.category}</span>
               </div>
               <div>
                 <div className="border-b border-slate-400 h-10 mb-1" />
-                <strong className="block text-slate-900 uppercase">Preparador Físico / Médico</strong>
-                <span>Área de Rendimiento</span>
+                <span className="text-[9px] text-slate-500 uppercase tracking-wider block font-semibold">Jefe Técnico</span>
+                <strong className="block text-slate-900 text-[11px] uppercase mt-0.5">Fernando Guajardo</strong>
+                <span className="text-[9px] text-slate-500 block">Jefatura Fútbol Formativo</span>
               </div>
               <div>
                 <div className="border-b border-slate-400 h-10 mb-1" />
-                <strong className="block text-slate-900 uppercase">Coordinación Cantera</strong>
-                <span>San Luis de Quillota</span>
+                <span className="text-[9px] text-slate-500 uppercase tracking-wider block font-semibold">Coordinadora</span>
+                <strong className="block text-slate-900 text-[11px] uppercase mt-0.5">Maite González</strong>
+                <span className="text-[9px] text-slate-500 block">Coordinación Cantera</span>
               </div>
             </div>
 
@@ -596,5 +691,7 @@ export const PlayerFichaPdfModal: React.FC<PlayerFichaPdfModalProps> = ({ player
         </div>
       </div>
     </div>
+  </div>
   );
 };
+

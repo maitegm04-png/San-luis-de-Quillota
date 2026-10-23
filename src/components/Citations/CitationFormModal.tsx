@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CLUB_CATEGORIES, MatchCitation, CitationPlayerEntry, Position, MatchCompetition } from '../../types/football';
+import { CLUB_CATEGORIES, MatchCitation, CitationPlayerEntry, Position, MatchCompetition, matchesCategoryFilter } from '../../types/football';
 import { useFootball } from '../../context/FootballContext';
 import { useAuth } from '../../context/AuthContext';
 import { getAllowedCategories } from '../../types/auth';
@@ -80,11 +80,18 @@ export const CitationFormModal: React.FC<CitationFormModalProps> = ({
     return [];
   });
 
-  // Filter available players for this category
-  const categoryPlayers = players.filter((p) => p.category === category);
+  // Filter available players strictly for this category
+  const categoryPlayers = players.filter((p) => matchesCategoryFilter(p.category, category));
 
   const handleCategoryChange = (newCat: string) => {
     setCategory(newCat);
+    // Remove any players from the previous category so no cross-category leaks occur
+    setSelectedPlayers((prev) =>
+      prev.filter((p) => {
+        const pl = players.find((x) => x.id === p.playerId);
+        return pl ? matchesCategoryFilter(pl.category, newCat) : matchesCategoryFilter(p.category || '', newCat);
+      })
+    );
   };
 
   const handleOpponentChange = (val: string) => {

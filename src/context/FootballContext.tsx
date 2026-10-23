@@ -51,7 +51,7 @@ interface FootballContextType {
   updateCategoryStaff: (cat: string, staff: Partial<CoachStaff>) => void;
   
   // Players actions
-  addPlayer: (player: Omit<Player, 'id' | 'stats'>) => void;
+  addPlayer: (player: Omit<Player, 'id' | 'stats'> & { id?: string }) => string;
   updatePlayer: (id: string, player: Partial<Player>) => void;
   deletePlayer: (id: string) => void;
   getPlayerById: (id?: string) => Player | undefined;
@@ -506,10 +506,11 @@ export const FootballProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return cleaned;
   };
 
-  const addPlayer = (playerData: Omit<Player, 'id' | 'stats'>) => {
+  const addPlayer = (playerData: Omit<Player, 'id' | 'stats'> & { id?: string }): string => {
+    const generatedId = playerData.id || `ply-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
     const newPlayer: Player = {
       ...playerData,
-      id: `ply-${Date.now()}`,
+      id: generatedId,
       stats: {
         matchesPlayed: 0,
         starts: 0,
@@ -523,7 +524,7 @@ export const FootballProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       },
     };
     setPlayers((prev) => {
-      const next = [...prev, newPlayer];
+      const next = [...prev.filter((p) => p.id !== generatedId), newPlayer];
       try {
         localStorage.setItem(STORAGE_KEY_PLAYERS, JSON.stringify(next));
       } catch (e) {
@@ -538,6 +539,8 @@ export const FootballProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         .then(() => recordQuotaOperation('write', 1))
         .catch((err) => console.error('Error saving player to Firestore:', err));
     }
+
+    return generatedId;
   };
 
   const updatePlayer = (id: string, updatedFields: Partial<Player>) => {

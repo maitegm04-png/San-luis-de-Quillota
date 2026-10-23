@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CLUB_CATEGORIES, MatchCompetition, MatchSheet, TacticalFormation } from '../../types/football';
+import { CLUB_CATEGORIES, MatchCompetition, MatchSheet, TacticalFormation, matchesCategoryFilter } from '../../types/football';
 import { useFootball } from '../../context/FootballContext';
 import { useAuth } from '../../context/AuthContext';
 import { getAllowedCategories } from '../../types/auth';
@@ -99,8 +99,9 @@ export const MatchFormModal: React.FC<MatchFormModalProps> = ({ matchToEdit, onC
         tacticalNotesPre: tacticalNotesPre.trim() || undefined,
       });
     } else {
-      // Auto-suggest lineup based on available players for this category or general
-      const availablePlayers = players.filter((p) => p.status === 'Disponible');
+      // Auto-suggest lineup based ONLY on players of this specific category
+      const categorySquad = players.filter((p) => matchesCategoryFilter(p.category, category));
+      const availablePlayers = categorySquad.filter((p) => p.status === 'Disponible');
       const slots = FORMATIONS_SLOTS[formation];
       
       const startingEleven = slots.slice(0, 11).map((slot, index) => {
@@ -116,7 +117,7 @@ export const MatchFormModal: React.FC<MatchFormModalProps> = ({ matchToEdit, onC
       const remainingAvailable = availablePlayers.filter((p) => !starterIds.includes(p.id));
       const substitutes = remainingAvailable.slice(0, 7).map((p) => p.id);
       const subIds = new Set([...starterIds, ...substitutes]);
-      const reserves = players.filter((p) => !subIds.has(p.id)).map((p) => p.id);
+      const reserves = categorySquad.filter((p) => !subIds.has(p.id)).map((p) => p.id);
 
       const defaultCaptain = starterIds[0];
 

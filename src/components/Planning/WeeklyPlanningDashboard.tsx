@@ -130,7 +130,7 @@ export const WeeklyPlanningDashboard: React.FC = () => {
     return () => unsub();
   }, [planId, selectedCategory, selectedYear, selectedWeek]);
 
-  // Dates for the current week
+  // Dates for the week from Monday to Sunday (Lunes a Domingo - 7 días)
   const weekDays = useMemo(() => {
     return getWeekDates(selectedYear, selectedWeek);
   }, [selectedYear, selectedWeek]);
@@ -578,7 +578,7 @@ export const WeeklyPlanningDashboard: React.FC = () => {
                 Semana {selectedWeek} ({selectedYear})
               </span>
               <span className="text-[10px] text-amber-400 font-medium">
-                {weekDays[0].displayDate} al {weekDays[6].displayDate}
+                {weekDays[0]?.displayDate} al {weekDays[6]?.displayDate}
               </span>
             </div>
 
@@ -593,8 +593,9 @@ export const WeeklyPlanningDashboard: React.FC = () => {
             <button
               onClick={handleGoCurrentWeek}
               className="ml-2 px-2.5 py-1 text-[10px] font-bold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-md transition-colors cursor-pointer"
+              title="Ir a la semana actual"
             >
-              Hoy
+              ⭐ Esta Semana
             </button>
           </div>
         </div>
@@ -664,7 +665,7 @@ export const WeeklyPlanningDashboard: React.FC = () => {
               {printScope === 'all' ? 'MICROCICLO COMPLETO (3 ÁREAS)' : activeArea === 'tecnica' ? 'ÁREA TÉCNICA' : activeArea === 'fisica' ? 'ÁREA FÍSICA' : 'ÁREA ARQUEROS'}
             </div>
             <p className="text-[11px] font-bold text-slate-600 mt-1">
-              Fechas: {weekDays[0].displayDate} al {weekDays[6].displayDate}
+              Fechas: {weekDays[0]?.displayDate} al {weekDays[weekDays.length - 1]?.displayDate}
             </p>
           </div>
         </div>
@@ -673,10 +674,10 @@ export const WeeklyPlanningDashboard: React.FC = () => {
         {/* 1. AREA TECNICA TABLE */}
         {/* ========================================================================= */}
         {(printScope === 'all' || activeArea === 'tecnica') && (
-          <div className="space-y-0 mb-6">
+          <div id="planning-area-tecnica" className="space-y-0 mb-6">
             {/* Main Yellow Banner */}
             <div className="bg-[#FFFF00] text-black font-black text-center py-2 text-sm sm:text-base uppercase tracking-wider border-2 border-black">
-              AREA TECNICA • {selectedCategory} • SEMANA {selectedWeek} ({weekDays[0].displayDate} - {weekDays[6].displayDate})
+              AREA TECNICA • {selectedCategory} • SEMANA {selectedWeek} ({weekDays[0]?.displayDate} - {weekDays[weekDays.length - 1]?.displayDate})
             </div>
 
             {/* Days Table */}
@@ -812,10 +813,10 @@ export const WeeklyPlanningDashboard: React.FC = () => {
         {/* 2. AREA FISICA TABLE */}
         {/* ========================================================================= */}
         {(printScope === 'all' || activeArea === 'fisica') && (
-          <div className="space-y-0 mb-6">
+          <div id="planning-area-fisica" className="space-y-0 mb-6">
             {/* Main Yellow Banner */}
             <div className="bg-[#FFFF00] text-black font-black text-center py-2 text-sm sm:text-base uppercase tracking-wider border-2 border-black">
-              AREA FISICA • {selectedCategory} • SEMANA {selectedWeek} ({weekDays[0].displayDate} - {weekDays[6].displayDate})
+              AREA FISICA • {selectedCategory} • SEMANA {selectedWeek} ({weekDays[0]?.displayDate} - {weekDays[weekDays.length - 1]?.displayDate})
             </div>
 
             <div className="overflow-x-auto">
@@ -1066,10 +1067,10 @@ export const WeeklyPlanningDashboard: React.FC = () => {
         {/* 3. AREA ARQUEROS TABLE */}
         {/* ========================================================================= */}
         {(printScope === 'all' || activeArea === 'arqueros') && (
-          <div className="space-y-0">
+          <div id="planning-area-arqueros" className="space-y-0">
             {/* Main Yellow Banner */}
             <div className="bg-[#FFFF00] text-black font-black text-center py-2 text-sm sm:text-base uppercase tracking-wider border-2 border-black">
-              AREA ARQUEROS • {selectedCategory} • SEMANA {selectedWeek} ({weekDays[0].displayDate} - {weekDays[6].displayDate})
+              AREA ARQUEROS • {selectedCategory} • SEMANA {selectedWeek} ({weekDays[0]?.displayDate} - {weekDays[weekDays.length - 1]?.displayDate})
             </div>
 
             <div className="overflow-x-auto">

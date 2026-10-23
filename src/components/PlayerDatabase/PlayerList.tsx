@@ -18,16 +18,20 @@ import {
   Clock,
   Activity,
   Shield,
-  Plus
+  Plus,
+  FileDown,
+  TrendingUp
 } from 'lucide-react';
 import { POSITION_LABELS } from '../../data/mockData';
+import { exportPlayerDatabaseToPdf } from '../../services/playerPdfGenerator';
+import { getPlayerProjection, PROJECTION_LEVELS, PROJECTION_LEVEL_MAP } from '../../data/projectionData';
 
 interface PlayerListProps {
   onOpenNewPlayer: () => void;
 }
 
 export const PlayerList: React.FC<PlayerListProps> = ({ onOpenNewPlayer }) => {
-  const { players, activeCategory, setActiveCategory } = useFootball();
+  const { players, activeCategory, setActiveCategory, getCategoryStaff } = useFootball();
   const { currentUser } = useAuth();
 
   const isCoordinator = currentUser?.role === 'Coordinador General' || currentUser?.category === 'Todas';
@@ -36,6 +40,7 @@ export const PlayerList: React.FC<PlayerListProps> = ({ onOpenNewPlayer }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedGroup, setSelectedGroup] = useState<string>('all');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
+  const [selectedProjection, setSelectedProjection] = useState<string>('all');
   const selectedCategory = activeCategory;
   const setSelectedCategory = (cat: string) => setActiveCategory(cat);
   const [sortBy, setSortBy] = useState<'dorsal' | 'name' | 'minutes' | 'goals' | 'rating'>('dorsal');
@@ -86,7 +91,11 @@ export const PlayerList: React.FC<PlayerListProps> = ({ onOpenNewPlayer }) => {
         // Category with grouping support
         const matchesCategory = matchesCategoryFilter(player.category, selectedCategory);
 
-        return matchesSearch && matchesGroup && matchesStatus && matchesCategory;
+        // First team projection level
+        const proj = getPlayerProjection(player);
+        const matchesProjection = selectedProjection === 'all' || proj.currentLevelId === selectedProjection;
+
+        return matchesSearch && matchesGroup && matchesStatus && matchesCategory && matchesProjection;
       })
       .sort((a, b) => {
         if (sortBy === 'dorsal') return a.squadNumber - b.squadNumber;
@@ -96,7 +105,7 @@ export const PlayerList: React.FC<PlayerListProps> = ({ onOpenNewPlayer }) => {
         if (sortBy === 'rating') return (b.stats.avgRating || 0) - (a.stats.avgRating || 0);
         return 0;
       });
-  }, [players, isCoordinator, allowedCategories, searchQuery, selectedGroup, selectedStatus, selectedCategory, sortBy]);
+  }, [players, isCoordinator, allowedCategories, searchQuery, selectedGroup, selectedStatus, selectedCategory, selectedProjection, sortBy]);
 
   // Squad counters scoped to authorized players
   const scopedPlayers = useMemo(() => {
@@ -124,13 +133,32 @@ export const PlayerList: React.FC<PlayerListProps> = ({ onOpenNewPlayer }) => {
             </p>
           </div>
 
-          <button
-            onClick={onOpenNewPlayer}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-emerald-900/40 transition-colors self-start md:self-auto"
-          >
-            <UserPlus className="w-4 h-4" />
-            <span>Inscribir Jugador</span>
-          </button>
+          <div className="flex items-center gap-2 self-start md:self-auto flex-wrap">
+            <button
+              type="button"
+              onClick={() => {
+                const currentStaff = selectedCategory && selectedCategory !== 'all' ? getCategoryStaff(selectedCategory) : undefined;
+                exportPlayerDatabaseToPdf(filteredPlayers, {
+                  category: selectedCategory,
+                  clubName: 'SAN LUIS DE QUILLOTA S.A.D.P.',
+                  coachName: currentStaff?.coach,
+                });
+              }}
+              className="inline-flex items-center gap-2 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-amber-400 font-bold text-xs rounded-xl border border-amber-400/40 shadow-md transition-all cursor-pointer"
+              title="Descarga la planilla oficial de la categoría en formato PDF descargable e imprimible"
+            >
+              <FileDown className="w-4 h-4 text-amber-400" />
+              <span>Exportar Plantilla PDF</span>
+            </button>
+
+            <button
+              onClick={onOpenNewPlayer}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-emerald-900/40 transition-colors"
+            >
+              <UserPlus className="w-4 h-4" />
+              <span>Inscribir Jugador</span>
+            </button>
+          </div>
         </div>
 
         {/* Status Pills Summary */}
@@ -256,7 +284,44 @@ export const PlayerList: React.FC<PlayerListProps> = ({ onOpenNewPlayer }) => {
               {st === 'all' ? 'Todos' : st}
             </button>
           ))}
+        </div>
 
+        {/* Projection Filter Pills */}
+        <div className="flex items-center gap-1.5 flex-wrap pt-2 border-t border-slate-800/80 text-xs">
+          <span className="text-amber-400 font-bold flex items-center gap-1 mr-1">
+            <TrendingUp className="w-3.5 h-3.5" /> Proyección 1° Equipo:
+          </span>
+          <button
+            type="button"
+            onClick={() => setSelectedProjection('all')}
+            className={`px-2.5 py-1 rounded-lg font-medium transition-colors ${
+              selectedProjection === 'all'
+                ? 'bg-amber-400 text-slate-950 font-black'
+                : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
+            }`}
+          >
+            Todas
+          </button>
+          {PROJECTION_LEVELS.map((lvl) => {
+            const isSelected = selectedProjection === lvl.id;
+            return (
+              <button
+                key={lvl.id}
+                type="button"
+                onClick={() => setSelectedProjection(lvl.id)}
+                className={`px-2.5 py-1 rounded-lg font-bold transition-all text-[11px] border flex items-center gap-1.5 cursor-pointer ${
+                  isSelected
+                    ? `${lvl.badgeBg} ${lvl.badgeText} ${lvl.borderColor} ring-1 ring-amber-400/60 shadow-md`
+                    : 'bg-slate-950 text-slate-400 hover:text-slate-200 border-slate-800'
+                }`}
+                title={`${lvl.fullLabel} (${lvl.timeframe})\n${lvl.description}`}
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${lvl.dotColor}`} />
+                <span>{lvl.code}</span>
+                <span className="text-[10px] opacity-80 font-normal">({lvl.timeframe})</span>
+              </button>
+            );
+          })}
         </div>
 
         {/* Categories Bar */}
@@ -334,6 +399,7 @@ export const PlayerList: React.FC<PlayerListProps> = ({ onOpenNewPlayer }) => {
                   <th className="py-3 px-4">Posición</th>
                   <th className="py-3 px-4">Categoría</th>
                   <th className="py-3 px-4">Estado</th>
+                  <th className="py-3 px-4 text-center">Proyección 1° Eq.</th>
                   <th className="py-3 px-4 text-center">Nutrición</th>
                   <th className="py-3 px-4 text-center">PJ</th>
                   <th className="py-3 px-4 text-center">Minutos</th>
@@ -393,6 +459,22 @@ export const PlayerList: React.FC<PlayerListProps> = ({ onOpenNewPlayer }) => {
                         }`}>
                           {p.status}
                         </span>
+                      </td>
+                      <td className="py-3 px-4 text-center whitespace-nowrap">
+                        {(() => {
+                          const pProj = getPlayerProjection(p);
+                          const pProjDef = PROJECTION_LEVEL_MAP[pProj.currentLevelId] || PROJECTION_LEVEL_MAP['nivel_4'];
+                          return (
+                            <span
+                              className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-bold border ${pProjDef.badgeBg} ${pProjDef.badgeText} ${pProjDef.borderColor}`}
+                              title={`${pProjDef.fullLabel} (${pProjDef.timeframe})`}
+                            >
+                              <span className={`w-1.5 h-1.5 rounded-full ${pProjDef.dotColor}`} />
+                              <span>{pProjDef.code}</span>
+                              <span className="text-[9px] opacity-80 font-normal">({pProjDef.timeframe})</span>
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td className="py-3 px-4 text-center">
                         {p.currentNutrition ? (

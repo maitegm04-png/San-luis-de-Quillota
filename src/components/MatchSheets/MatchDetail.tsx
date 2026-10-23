@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { MatchCompetition, MatchEventType, MatchSheet, Player, TacticalFormation } from '../../types/football';
+import { MatchCompetition, MatchEventType, MatchSheet, Player, TacticalFormation, matchesCategoryFilter } from '../../types/football';
 import { useFootball } from '../../context/FootballContext';
 import { PitchView } from '../PitchView';
 import { PrintableMatchSheet } from './PrintableMatchSheet';
@@ -179,6 +179,11 @@ export const MatchDetail: React.FC<MatchDetailProps> = ({ match, onBackToList })
     return players.find((p) => p.id === id);
   };
 
+  // Strictly filter players belonging to this match's category
+  const categorySquadPlayers = React.useMemo(() => {
+    return players.filter((p) => matchesCategoryFilter(p.category, match.category));
+  }, [players, match.category]);
+
   const starterPlayerIds = match.startingEleven.map((s) => s.playerId);
   const starterPlayers = starterPlayerIds.map((id) => getPlayer(id)).filter((p): p is Player => p !== undefined);
 
@@ -186,7 +191,8 @@ export const MatchDetail: React.FC<MatchDetailProps> = ({ match, onBackToList })
     .map((id) => getPlayer(id))
     .filter((p): p is Player => p !== undefined);
 
-  const reservePlayers = players.filter(
+  // Reserves: ONLY players from this category who are not already starters or substitutes
+  const reservePlayers = categorySquadPlayers.filter(
     (p) => !starterPlayerIds.includes(p.id) && !match.substitutes.includes(p.id)
   );
 
@@ -1277,7 +1283,7 @@ export const MatchDetail: React.FC<MatchDetailProps> = ({ match, onBackToList })
             <PitchView
               formation={match.formation}
               startingEleven={match.startingEleven}
-              players={players}
+              players={categorySquadPlayers}
               captainId={match.captainId}
               viceCaptainId={match.viceCaptainId}
               penaltyTakerId={match.penaltyTakerId}
@@ -1923,7 +1929,7 @@ export const MatchDetail: React.FC<MatchDetailProps> = ({ match, onBackToList })
             </div>
 
             <div className="space-y-2 max-h-80 overflow-y-auto">
-              {players.map((p) => {
+              {categorySquadPlayers.map((p) => {
                 const isAlreadyStarting = starterPlayerIds.includes(p.id);
                 const posConfig = POSITION_LABELS[p.primaryPosition] || POSITION_LABELS['MC'];
                 const isInjured = p.status === 'Lesionado';

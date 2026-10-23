@@ -1374,6 +1374,7 @@ export const NutritionDashboard: React.FC = () => {
       {isManualModalOpen && (
         <NutritionManualModal
           initialPlayerId={selectedPlayerForUploadId}
+          defaultCategory={activeCategory}
           onClose={() => {
             setIsManualModalOpen(false);
             setSelectedPlayerForUploadId(undefined);

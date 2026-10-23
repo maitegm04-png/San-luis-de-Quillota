@@ -1,12 +1,17 @@
 import * as pdfjsLib from 'pdfjs-dist';
+import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { Player, PlayerNutritionalEvaluation, NutritionTrafficLight, NutritionStatusType } from '../types/football';
 
-// Configure pdfjs worker for browser
+// Configure pdfjs worker for browser (uses local Vite static asset with fallback)
 if (typeof window !== 'undefined') {
   try {
-    pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+    pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
   } catch (err) {
-    console.warn('Could not set pdfjs workerSrc', err);
+    try {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
+    } catch {
+      // fallback
+    }
   }
 }
 
@@ -178,9 +183,27 @@ export function determineNutritionTrafficLight(
 }
 
 /**
- * Extracts raw plain text from all pages of a PDF File
+ * Extracts raw plain text from all pages of a PDF File (or CSV / TSV / TXT files)
  */
 export async function extractTextFromPdf(file: File): Promise<string> {
+  // If file is already a text-based format (CSV, TSV, TXT), read directly
+  if (
+    file.name.endsWith('.csv') ||
+    file.name.endsWith('.tsv') ||
+    file.name.endsWith('.txt') ||
+    file.type.includes('text') ||
+    file.type.includes('csv')
+  ) {
+    try {
+      const text = await file.text();
+      if (text && text.trim().length > 0) {
+        return text;
+      }
+    } catch {
+      // fallback to pdfjs
+    }
+  }
+
   try {
     const arrayBuffer = await file.arrayBuffer();
     const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) });

@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { PlayerInjury, InjuryStatus, CLUB_CATEGORIES } from '../../types/football';
+import React, { useState, useMemo } from 'react';
+import { PlayerInjury, InjuryStatus, CLUB_CATEGORIES, matchesCategoryFilter } from '../../types/football';
 import { useFootball } from '../../context/FootballContext';
 import { useAuth } from '../../context/AuthContext';
 import { getAllowedCategories } from '../../types/auth';
@@ -77,10 +77,20 @@ export const InjuryFormModal: React.FC<InjuryFormModalProps> = ({
   const allowedCategories = getAllowedCategories(currentUser?.category);
   const availableCategories = isCoordinator ? CLUB_CATEGORIES : allowedCategories;
 
-  // Filter players by category if not coordinator
-  const eligiblePlayers = isCoordinator 
-    ? players 
-    : players.filter((p) => availableCategories.includes(p.category as any));
+  const [selectedCategory, setSelectedCategory] = useState<string>(() => {
+    if (injuryToEdit?.category) return injuryToEdit.category;
+    if (defaultPlayerId) {
+      const pl = players.find((p) => p.id === defaultPlayerId);
+      if (pl?.category) return pl.category;
+    }
+    if (activeCategory && activeCategory !== 'all' && activeCategory !== 'Todas') return activeCategory;
+    return availableCategories[0] || 'Sub 14';
+  });
+
+  // Filter players strictly by selectedCategory
+  const eligiblePlayers = useMemo(() => {
+    return players.filter((p) => matchesCategoryFilter(p.category, selectedCategory));
+  }, [players, selectedCategory]);
 
   const [selectedPlayerId, setSelectedPlayerId] = useState<string>(
     injuryToEdit?.playerId || defaultPlayerId || eligiblePlayers[0]?.id || ''
@@ -220,10 +230,32 @@ export const InjuryFormModal: React.FC<InjuryFormModalProps> = ({
         <form onSubmit={handleSubmit} className="p-5 space-y-4 max-h-[78vh] overflow-y-auto text-xs">
           {/* 1. Nombre del jugador */}
           <div className="p-3 bg-slate-950 rounded-xl border border-slate-800">
-            <label className="block font-bold text-slate-300 mb-1.5 flex items-center gap-1.5">
-              <User className="w-3.5 h-3.5 text-amber-400" />
-              <span>1. Futbolista Afectado</span>
-            </label>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block font-bold text-slate-300 flex items-center gap-1.5">
+                <User className="w-3.5 h-3.5 text-amber-400" />
+                <span>1. Futbolista Afectado</span>
+              </label>
+
+              {!injuryToEdit && (
+                <div className="flex items-center gap-1 text-[11px]">
+                  <span className="text-slate-400 font-semibold">Categoría:</span>
+                  <select
+                    value={selectedCategory}
+                    onChange={(e) => {
+                      const newCat = e.target.value;
+                      setSelectedCategory(newCat);
+                      const catSquad = players.filter((p) => matchesCategoryFilter(p.category, newCat));
+                      if (catSquad.length > 0) setSelectedPlayerId(catSquad[0].id);
+                    }}
+                    className="bg-slate-900 border border-slate-700 text-amber-300 font-bold rounded px-2 py-0.5 text-xs focus:outline-none cursor-pointer"
+                  >
+                    {availableCategories.map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
             <select
               value={selectedPlayerId}
               disabled={!!injuryToEdit}

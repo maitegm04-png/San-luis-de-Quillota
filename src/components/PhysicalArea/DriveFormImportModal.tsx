@@ -84,10 +84,20 @@ function getDayOfWeekFromDate(dateStr: string): DayOfWeek {
   return 'Lunes';
 }
 
+// Helper to get today's date formatted as YYYY-MM-DD
+function getTodayIsoDate(): string {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 // Helper to parse dates like "13/10/2026 7:23:58" or "2026-10-13" or "13/10/26" into "2026-10-13"
-function parseFormDate(raw?: string | null, fallbackDate: string = '2026-10-14'): { dateStr: string; day: DayOfWeek } {
+function parseFormDate(raw?: string | null, fallbackDate?: string): { dateStr: string; day: DayOfWeek } {
+  const fallback = fallbackDate || getTodayIsoDate();
   if (!raw || typeof raw !== 'string') {
-    return { dateStr: fallbackDate, day: getDayOfWeekFromDate(fallbackDate) };
+    return { dateStr: fallback, day: getDayOfWeekFromDate(fallback) };
   }
   const clean = raw.trim();
 
@@ -112,7 +122,7 @@ function parseFormDate(raw?: string | null, fallbackDate: string = '2026-10-14')
     return { dateStr, day: getDayOfWeekFromDate(dateStr) };
   }
 
-  return { dateStr: fallbackDate, day: getDayOfWeekFromDate(fallbackDate) };
+  return { dateStr: fallback, day: getDayOfWeekFromDate(fallback) };
 }
 
 export const DriveFormImportModal: React.FC<DriveFormImportModalProps> = ({
@@ -120,23 +130,43 @@ export const DriveFormImportModal: React.FC<DriveFormImportModalProps> = ({
   onClose,
   onSuccess
 }) => {
-  const { players, addWeeklyCheckInsBatch, addWeeklyCheckOutsBatch } = useFootball();
+  const { players, addPlayer, addWeeklyCheckInsBatch, addWeeklyCheckOutsBatch } = useFootball();
 
   // Squad of category for matching (safely includes Sub 20 <-> Proyección / Juvenil)
   const categoryPlayers = useMemo(() => {
     const normCategory = normalizeStr(category);
-    return players.filter((p) => {
+    const seen = new Set<string>();
+    const list: Player[] = [];
+    players.forEach((p) => {
+      if (!p || !p.id || seen.has(p.id)) return;
       const pCat = normalizeStr(p.category || '');
-      if (pCat === normCategory) return true;
+      let match = pCat === normCategory;
       if (
         (normCategory.includes('20') || normCategory.includes('proyeccion')) &&
         (pCat.includes('20') || pCat.includes('proyeccion') || pCat.includes('juvenil'))
       ) {
-        return true;
+        match = true;
       }
-      return false;
+      if (match) {
+        seen.add(p.id);
+        list.push(p);
+      }
     });
+    return list;
   }, [players, category]);
+
+  // Unique players from other categories for the fallback dropdown
+  const otherPlayers = useMemo(() => {
+    const catPlayerIds = new Set(categoryPlayers.map((p) => p.id));
+    const seen = new Set<string>();
+    const list: Player[] = [];
+    players.forEach((p) => {
+      if (!p || !p.id || catPlayerIds.has(p.id) || seen.has(p.id)) return;
+      seen.add(p.id);
+      list.push(p);
+    });
+    return list;
+  }, [players, categoryPlayers]);
 
   // Mode: Auto, Check-in, or Check-out
   const [formType, setFormType] = useState<'auto' | 'checkin' | 'checkout'>('auto');
@@ -149,7 +179,7 @@ export const DriveFormImportModal: React.FC<DriveFormImportModalProps> = ({
 
   // Target date filter: allow selecting which day to import ("ir subiendo día a día")
   const [targetDateFilter, setTargetDateFilter] = useState<string>('all');
-  const [manualDate, setManualDate] = useState<string>('2026-10-14');
+  const [manualDate, setManualDate] = useState<string>(() => getTodayIsoDate());
 
   // Parsed rows
   const [parsedRows, setParsedRows] = useState<ParsedFormRow[]>([]);
@@ -436,7 +466,7 @@ export const DriveFormImportModal: React.FC<DriveFormImportModalProps> = ({
         else if (pse >= 7) status = 'Fatiga Normal';
 
         parsed.push({
-          id: `row-${idx}-${Date.now()}`,
+          id: `row-${idx}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
           rawTimestamp,
           normalizedDate: dateStr,
           dayOfWeek: day,
@@ -481,7 +511,7 @@ export const DriveFormImportModal: React.FC<DriveFormImportModalProps> = ({
       if (datesList.length === 1) {
         setTargetDateFilter(datesList[0].dateStr);
       } else if (datesList.length > 1) {
-        setTargetDateFilter(datesList[0].dateStr);
+        setTargetDateFilter('all');
       }
     } catch (err) {
       console.error('Error procesando formulario Drive:', err);
@@ -516,6 +546,60 @@ export const DriveFormImportModal: React.FC<DriveFormImportModalProps> = ({
     return parsedRows.filter((r) => r.normalizedDate === targetDateFilter);
   }, [parsedRows, targetDateFilter]);
 
+  // Auto-create all unmatched players in this category
+  const handleAutoCreateMissingPlayers = () => {
+    const missingRows = parsedRows.filter((r) => !r.matchedPlayerId && r.rawPlayerName);
+    if (missingRows.length === 0) return;
+
+    const createdMap = new Map<string, { id: string; fullName: string }>();
+
+    setParsedRows((prev) =>
+      prev.map((r) => {
+        if (r.matchedPlayerId) return r;
+        const raw = (r.rawPlayerName || '').trim();
+        if (!raw) return r;
+
+        if (createdMap.has(raw)) {
+          const info = createdMap.get(raw)!;
+          return {
+            ...r,
+            matchedPlayerId: info.id,
+            matchedPlayerName: info.fullName,
+            confidence: 'high' as const,
+          };
+        }
+
+        const tokens = raw.split(/\s+/).filter(Boolean);
+        const firstName = tokens[0] || 'Jugador';
+        const lastName = tokens.slice(1).join(' ') || '-';
+        const assignedId = addPlayer({
+          firstName,
+          lastName,
+          category,
+          primaryPosition: 'MC',
+          squadNumber: Math.floor(Math.random() * 50) + 1,
+          status: 'Disponible',
+          dominantFoot: 'Derecho',
+          avatarColor: '#eab308',
+          birthDate: '2008-01-01',
+          weightKg: 68,
+          heightCm: 175,
+          attributes: { pace: 70, shooting: 65, passing: 70, dribbling: 70, defending: 65, physical: 70 },
+        });
+
+        const fullName = `${firstName} ${lastName}`.trim();
+        createdMap.set(raw, { id: assignedId, fullName });
+
+        return {
+          ...r,
+          matchedPlayerId: assignedId,
+          matchedPlayerName: fullName,
+          confidence: 'high' as const,
+        };
+      })
+    );
+  };
+
   // Player selection change in table
   const handleRowPlayerChange = (rowId: string, playerId: string) => {
     setParsedRows((prev) =>
@@ -547,14 +631,58 @@ export const DriveFormImportModal: React.FC<DriveFormImportModalProps> = ({
     );
   };
 
-  // Final confirmation: batch save
+  // Final confirmation: batch save (automatically registers and creates missing players on the fly)
   const handleConfirmImport = () => {
-    const rowsToImport = filteredRows.filter((r) => r.selected && r.matchedPlayerId);
-    if (rowsToImport.length === 0) return;
+    const selectedRows = filteredRows.filter((r) => r.selected);
+    if (selectedRows.length === 0) return;
+
+    // Cache of players created on-the-fly during this import session
+    const dynamicPlayerMap = new Map<string, { id: string; fullName: string }>();
+
+    const rowsToImport = selectedRows.map((r) => {
+      let playerId = r.matchedPlayerId;
+      let playerName = r.matchedPlayerName;
+
+      // If player wasn't matched yet, auto-create them now so import is NEVER blocked!
+      if (!playerId && r.rawPlayerName) {
+        const raw = r.rawPlayerName.trim();
+        if (dynamicPlayerMap.has(raw)) {
+          const info = dynamicPlayerMap.get(raw)!;
+          playerId = info.id;
+          playerName = info.fullName;
+        } else {
+          const tokens = raw.split(/\s+/).filter(Boolean);
+          const firstName = tokens[0] || 'Jugador';
+          const lastName = tokens.slice(1).join(' ') || '-';
+          playerId = addPlayer({
+            firstName,
+            lastName,
+            category,
+            primaryPosition: 'MC',
+            squadNumber: Math.floor(Math.random() * 50) + 1,
+            status: 'Disponible',
+            dominantFoot: 'Derecho',
+            avatarColor: '#eab308',
+            birthDate: '2008-01-01',
+            weightKg: 68,
+            heightCm: 175,
+            attributes: { pace: 70, shooting: 65, passing: 70, dribbling: 70, defending: 65, physical: 70 },
+          });
+          playerName = `${firstName} ${lastName}`.trim();
+          dynamicPlayerMap.set(raw, { id: playerId, fullName: playerName });
+        }
+      }
+
+      return {
+        ...r,
+        matchedPlayerId: playerId || 'temp-player',
+        matchedPlayerName: playerName || r.rawPlayerName,
+      };
+    });
 
     if (detectedType === 'checkin') {
       const checkinEntries: Omit<WeeklyCheckInEntry, 'id' | 'createdAt'>[] = rowsToImport.map((r) => ({
-        playerId: r.matchedPlayerId!,
+        playerId: r.matchedPlayerId,
         playerName: r.matchedPlayerName || r.rawPlayerName,
         category,
         date: r.normalizedDate,
@@ -579,7 +707,7 @@ export const DriveFormImportModal: React.FC<DriveFormImportModalProps> = ({
       onSuccess(checkinEntries.length, rowsToImport[0].dayOfWeek, 'checkin', targetDate);
     } else {
       const checkoutEntries: Omit<WeeklyCheckOutEntry, 'id' | 'createdAt'>[] = rowsToImport.map((r) => ({
-        playerId: r.matchedPlayerId!,
+        playerId: r.matchedPlayerId,
         playerName: r.matchedPlayerName || r.rawPlayerName,
         category,
         date: r.normalizedDate,
@@ -730,8 +858,8 @@ export const DriveFormImportModal: React.FC<DriveFormImportModalProps> = ({
                   className="w-full bg-slate-900 border border-slate-700 rounded-lg p-1.5 text-xs font-bold text-amber-300 focus:outline-amber-400 cursor-pointer"
                 >
                   <option value="all">Todas las fechas del formulario ({parsedRows.length})</option>
-                  {availableDates.map((d) => (
-                    <option key={d.dateStr} value={d.dateStr}>
+                  {availableDates.map((d, dIdx) => (
+                    <option key={`avail-date-${d.dateStr || dIdx}-${dIdx}`} value={d.dateStr}>
                       📅 {d.label} ({d.count} futbolistas)
                     </option>
                   ))}
@@ -831,7 +959,18 @@ export const DriveFormImportModal: React.FC<DriveFormImportModalProps> = ({
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 text-[11px]">
+                <div className="flex items-center gap-2 text-[11px] flex-wrap">
+                  {filteredRows.some((r) => !r.matchedPlayerId) && (
+                    <button
+                      type="button"
+                      onClick={handleAutoCreateMissingPlayers}
+                      className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black rounded-lg shadow-sm cursor-pointer transition-colors"
+                      title="Crea automáticamente a los futbolistas no encontrados en la base de datos de esta categoría"
+                    >
+                      <UserCheck className="w-3.5 h-3.5" />
+                      Auto-crear {filteredRows.filter((r) => !r.matchedPlayerId).length} Faltantes en {category}
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => handleToggleAll(true)}
@@ -888,8 +1027,8 @@ export const DriveFormImportModal: React.FC<DriveFormImportModalProps> = ({
                         </td>
                       </tr>
                     ) : (
-                      filteredRows.map((row) => (
-                        <tr key={row.id} className={`hover:bg-slate-800/40 transition-colors ${!row.matchedPlayerId ? 'bg-rose-950/20' : ''}`}>
+                      filteredRows.map((row, rowIdx) => (
+                        <tr key={row.id ? `drive-row-${row.id}-${rowIdx}` : `drive-row-${rowIdx}`} className={`hover:bg-slate-800/40 transition-colors ${!row.matchedPlayerId ? 'bg-rose-950/20' : ''}`}>
                           <td className="p-2 text-center">
                             <input
                               type="checkbox"
@@ -919,21 +1058,19 @@ export const DriveFormImportModal: React.FC<DriveFormImportModalProps> = ({
                             >
                               <option value="">⚠️ Sin identificar (elegir...)</option>
                               <optgroup label={`Plantel ${category}`}>
-                                {categoryPlayers.map((p) => (
-                                  <option key={p.id} value={p.id}>
+                                {categoryPlayers.map((p, pIdx) => (
+                                  <option key={`row-${row.id}-cat-${p.id || pIdx}`} value={p.id}>
                                     #{p.squadNumber} {(p.lastName || '').toUpperCase()}, {p.firstName || ''} ({p.primaryPosition || ''})
                                   </option>
                                 ))}
                               </optgroup>
-                              {players.filter((p) => !categoryPlayers.some((cp) => cp.id === p.id)).length > 0 && (
+                              {otherPlayers.length > 0 && (
                                 <optgroup label="Otras Categorías del Club">
-                                  {players
-                                    .filter((p) => !categoryPlayers.some((cp) => cp.id === p.id))
-                                    .map((p) => (
-                                      <option key={p.id} value={p.id}>
-                                        #{p.squadNumber} {(p.lastName || '').toUpperCase()}, {p.firstName || ''} ({p.category})
-                                      </option>
-                                    ))}
+                                  {otherPlayers.map((p, pIdx) => (
+                                    <option key={`row-${row.id}-oth-${p.id || pIdx}`} value={p.id}>
+                                      #{p.squadNumber} {(p.lastName || '').toUpperCase()}, {p.firstName || ''} ({p.category})
+                                    </option>
+                                  ))}
                                 </optgroup>
                               )}
                             </select>
@@ -1004,7 +1141,12 @@ export const DriveFormImportModal: React.FC<DriveFormImportModalProps> = ({
           <div className="text-[11px] text-slate-400">
             {hasParsed && (
               <span>
-                Listos para registrar: <strong className="text-white">{filteredRows.filter((r) => r.selected && r.matchedPlayerId).length}</strong> futbolistas
+                Listos para registrar: <strong className="text-white">{filteredRows.filter((r) => r.selected).length}</strong> futbolistas seleccionados
+                {filteredRows.some((r) => r.selected && !r.matchedPlayerId) && (
+                  <span className="text-amber-400 ml-2 font-medium">
+                    (Se inscribirán automáticamente {filteredRows.filter((r) => r.selected && !r.matchedPlayerId).length} jugadores nuevos en {category})
+                  </span>
+                )}
               </span>
             )}
           </div>
@@ -1020,13 +1162,13 @@ export const DriveFormImportModal: React.FC<DriveFormImportModalProps> = ({
 
             <button
               type="button"
-              disabled={!hasParsed || filteredRows.filter((r) => r.selected && r.matchedPlayerId).length === 0}
+              disabled={!hasParsed || filteredRows.filter((r) => r.selected).length === 0}
               onClick={handleConfirmImport}
               className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-emerald-950/50 cursor-pointer transition-all"
             >
               <Check className="w-4 h-4" />
               <span>
-                Confirmar y Registrar {filteredRows.filter((r) => r.selected && r.matchedPlayerId).length} Registros ({detectedType === 'checkin' ? 'Check-In' : 'Check-Out'})
+                Confirmar y Registrar {filteredRows.filter((r) => r.selected).length} Registros ({detectedType === 'checkin' ? 'Check-In' : 'Check-Out'})
               </span>
             </button>
           </div>

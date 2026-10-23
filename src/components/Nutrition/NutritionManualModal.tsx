@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   Plus, 
   X, 
@@ -12,22 +12,39 @@ import {
 } from 'lucide-react';
 import { useFootball } from '../../context/FootballContext';
 import { determineNutritionTrafficLight } from '../../services/nutritionPdfParser';
-import { NutritionTrafficLight, NutritionStatusType } from '../../types/football';
+import { NutritionTrafficLight, NutritionStatusType, matchesCategoryFilter, CLUB_CATEGORIES } from '../../types/football';
 
 interface NutritionManualModalProps {
   onClose: () => void;
   initialPlayerId?: string;
+  defaultCategory?: string;
   onSuccess?: () => void;
 }
 
 export const NutritionManualModal: React.FC<NutritionManualModalProps> = ({
   onClose,
   initialPlayerId,
+  defaultCategory,
   onSuccess,
 }) => {
-  const { players, addNutritionalEvaluation } = useFootball();
+  const { players, activeCategory, addNutritionalEvaluation } = useFootball();
 
-  const [selectedPlayerId, setSelectedPlayerId] = useState<string>(initialPlayerId || players[0]?.id || '');
+  const [categoryFilter, setCategoryFilter] = useState<string>(() => {
+    if (defaultCategory && defaultCategory !== 'all' && defaultCategory !== 'Todas') return defaultCategory;
+    if (activeCategory && activeCategory !== 'all' && activeCategory !== 'Todas') return activeCategory;
+    return 'all';
+  });
+
+  const eligiblePlayers = useMemo(() => {
+    if (categoryFilter === 'all' || categoryFilter === 'Todas') return players;
+    return players.filter((p) => matchesCategoryFilter(p.category, categoryFilter));
+  }, [players, categoryFilter]);
+
+  const [selectedPlayerId, setSelectedPlayerId] = useState<string>(() => {
+    if (initialPlayerId) return initialPlayerId;
+    if (eligiblePlayers.length > 0) return eligiblePlayers[0].id;
+    return players[0]?.id || '';
+  });
   const [evaluationDate, setEvaluationDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [periodName, setPeriodName] = useState<string>('Control Antropométrico');
   const [age, setAge] = useState<number | undefined>(19);
@@ -210,9 +227,35 @@ export const NutritionManualModal: React.FC<NutritionManualModalProps> = ({
           )}
           {/* Player Selector */}
           <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-3">
-            <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
-              1. Seleccionar Futbolista
-            </label>
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
+                1. Seleccionar Futbolista
+              </label>
+
+              <div className="flex items-center gap-1.5 text-xs">
+                <span className="text-slate-400 font-semibold text-[11px]">Categoría:</span>
+                <select
+                  value={categoryFilter}
+                  onChange={(e) => {
+                    const newCat = e.target.value;
+                    setCategoryFilter(newCat);
+                    const catPlayers = newCat === 'all' ? players : players.filter((p) => matchesCategoryFilter(p.category, newCat));
+                    if (catPlayers.length > 0) {
+                      setSelectedPlayerId(catPlayers[0].id);
+                      if (catPlayers[0].weightKg) setWeightKg(catPlayers[0].weightKg);
+                      if (catPlayers[0].heightCm) setHeightCm(catPlayers[0].heightCm);
+                    }
+                  }}
+                  className="bg-slate-900 border border-slate-700 text-amber-300 font-bold rounded px-2 py-0.5 text-xs focus:outline-none cursor-pointer"
+                >
+                  <option value="all">Todas las Categorías</option>
+                  {CLUB_CATEGORIES.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
               <select
                 value={selectedPlayerId}
@@ -226,7 +269,7 @@ export const NutritionManualModal: React.FC<NutritionManualModalProps> = ({
                 }}
                 className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-semibold focus:border-amber-400"
               >
-                {players.map((p) => (
+                {eligiblePlayers.map((p) => (
                   <option key={p.id} value={p.id}>
                     #{p.squadNumber} - {p.firstName} {p.lastName} ({p.category})
                   </option>

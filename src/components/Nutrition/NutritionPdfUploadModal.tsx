@@ -439,18 +439,18 @@ export const NutritionPdfUploadModal: React.FC<NutritionPdfUploadModalProps> = (
               <div className="border-2 border-dashed border-slate-700 hover:border-amber-400 rounded-2xl p-8 text-center bg-slate-950/60 transition-colors">
                 <FileUp className="w-12 h-12 text-amber-400 mx-auto mb-3 animate-pulse" />
                 <h3 className="text-base font-bold text-white mb-1">
-                  Arrastra o selecciona el informe antropométrico en PDF
+                  Arrastra o selecciona el informe antropométrico en PDF, CSV o Texto
                 </h3>
                 <p className="text-xs text-slate-400 max-w-md mx-auto mb-4">
-                  Soporta el formato de 5 Componentes de San Luis de Quillota (hasta 27 jugadores por informe) o fichas individuales.
+                  Soporta el formato de 5 Componentes de San Luis de Quillota (hasta 27 jugadores por informe en PDF o CSV) o fichas individuales.
                 </p>
 
                 <label className="inline-flex items-center gap-2 px-5 py-2.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs rounded-xl shadow cursor-pointer transition-all hover:scale-105">
                   <FileUp className="w-4 h-4" />
-                  <span>Explorar Archivo PDF en mi Equipo</span>
+                  <span>Explorar Archivo (PDF, CSV o Documento)...</span>
                   <input
                     type="file"
-                    accept=".pdf,application/pdf"
+                    accept=".pdf,.csv,.tsv,.txt,application/pdf,text/csv,text/plain"
                     onChange={handleFileInputChange}
                     className="hidden"
                   />

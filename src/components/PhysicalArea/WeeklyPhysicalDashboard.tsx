@@ -38,22 +38,46 @@ import { SanLuisLogo } from '../Common/SanLuisLogo';
 import { DriveFormImportModal } from './DriveFormImportModal';
 import { WeeklyPhysicalPdfModal } from './WeeklyPhysicalPdfModal';
 
-// Helper to find Monday of any date
-export function getMondayOfDate(dateStr: string): string {
-  if (!dateStr) return '2026-10-12';
-  const parts = dateStr.split('-');
-  if (parts.length !== 3) return '2026-10-12';
-  const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+// Helper to get today's date formatted as YYYY-MM-DD
+export function getTodayDateStr(): string {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const date = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${date}`;
+}
+
+// Helper to get today's Spanish Day of Week
+export function getTodayDayName(): DayOfWeek {
+  const d = new Date();
+  const days: DayOfWeek[] = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+  return days[d.getDay()] || 'Lunes';
+}
+
+// Helper to find Monday of any date (defaults to current real week if not provided)
+export function getMondayOfDate(dateStr?: string): string {
+  let d: Date;
+  if (dateStr) {
+    const parts = dateStr.split('-');
+    if (parts.length === 3) {
+      d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+    } else {
+      d = new Date();
+    }
+  } else {
+    d = new Date();
+  }
   const day = d.getDay(); // 0 is Sunday, 1 is Monday...
   const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  const monday = new Date(d.setDate(diff));
+  const monday = new Date(d);
+  monday.setDate(diff);
   const year = monday.getFullYear();
   const month = String(monday.getMonth() + 1).padStart(2, '0');
   const date = String(monday.getDate()).padStart(2, '0');
   return `${year}-${month}-${date}`;
 }
 
-// Helper to get all 7 dates of a week starting from Monday
+// Helper to get all 7 dates of a week from Monday to Sunday (Lunes a Domingo)
 export function getWeekDates(mondayStr: string): { key: DayOfWeek; label: string; dateStr: string; displayDate: string }[] {
   const parts = mondayStr.split('-');
   const monday = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
@@ -109,9 +133,11 @@ export const WeeklyPhysicalDashboard: React.FC = () => {
 
   const [activeSubTab, setActiveSubTab] = useState<'matrix' | 'batch_entry' | 'load_analysis'>('matrix');
 
-  // Navigation across weeks (Allows filtering past weeks)
-  const [currentWeekMonday, setCurrentWeekMonday] = useState<string>('2026-10-12');
+  // Navigation across weeks: always initialized to the current real week's Monday
+  const realCurrentMonday = useMemo(() => getMondayOfDate(), []);
+  const [currentWeekMonday, setCurrentWeekMonday] = useState<string>(() => getMondayOfDate());
 
+  // Week days from Monday to Sunday (7 days)
   const weekDays = useMemo(() => {
     return getWeekDates(currentWeekMonday);
   }, [currentWeekMonday]);
@@ -120,17 +146,26 @@ export const WeeklyPhysicalDashboard: React.FC = () => {
     if (weekDays.length === 0) return '';
     const first = weekDays[0];
     const last = weekDays[weekDays.length - 1];
-    return `Semana del ${first.displayDate} al ${last.displayDate}/${first.dateStr.slice(0, 4)}`;
+    return `Semana del ${first.label} ${first.displayDate} al ${last.label} ${last.displayDate}/${first.dateStr.slice(0, 4)}`;
   }, [weekDays]);
 
   // List of weeks for navigation and past weeks filtering
   const availableWeeks = useMemo(() => {
     const mondaysSet = new Set<string>();
-    mondaysSet.add('2026-10-12');
-    mondaysSet.add('2026-10-05');
-    mondaysSet.add('2026-09-28');
-    mondaysSet.add('2026-10-19');
+    const thisMonday = getMondayOfDate();
+    mondaysSet.add(thisMonday);
     mondaysSet.add(getMondayOfDate(currentWeekMonday));
+
+    // Dynamically populate surrounding weeks (-3 to +2)
+    [-3, -2, -1, 1, 2].forEach((offset) => {
+      const parts = thisMonday.split('-');
+      const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+      d.setDate(d.getDate() + offset * 7);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      mondaysSet.add(`${y}-${m}-${day}`);
+    });
 
     weeklyCheckIns.forEach((c) => {
       if (c.date) mondaysSet.add(getMondayOfDate(c.date));
@@ -142,9 +177,11 @@ export const WeeklyPhysicalDashboard: React.FC = () => {
     const list = Array.from(mondaysSet).sort().reverse();
     return list.map((mStr) => {
       const days = getWeekDates(mStr);
+      const isCurrent = mStr === thisMonday;
       return {
         mondayStr: mStr,
-        label: `Semana ${days[0].displayDate} al ${days[6].displayDate} (${mStr.slice(0, 4)})`,
+        isCurrent,
+        label: `Semana ${days[0].displayDate} al ${days[6].displayDate} (${mStr.slice(0, 4)})${isCurrent ? ' ⭐ (Semana Actual)' : ''}`,
       };
     });
   }, [weeklyCheckIns, weeklyCheckOuts, currentWeekMonday]);
@@ -170,7 +207,7 @@ export const WeeklyPhysicalDashboard: React.FC = () => {
   };
 
   const handleCurrentWeek = () => {
-    setCurrentWeekMonday('2026-10-12');
+    setCurrentWeekMonday(getMondayOfDate());
   };
 
   // Custom day schedules (e.g. Día de Partido, Día Libre, Entrenamiento, etc.) per category and date
@@ -234,9 +271,9 @@ export const WeeklyPhysicalDashboard: React.FC = () => {
     });
   };
 
-  // Selected date for daily entries (Defaults to current date)
-  const [selectedDate, setSelectedDate] = useState<string>('2026-10-14');
-  const [selectedDayName, setSelectedDayName] = useState<DayOfWeek>('Miércoles');
+  // Selected date for daily entries (Defaults to current today date)
+  const [selectedDate, setSelectedDate] = useState<string>(() => getTodayDateStr());
+  const [selectedDayName, setSelectedDayName] = useState<DayOfWeek>(() => getTodayDayName());
 
   // Modal states for single entry, Drive import and PDF export
   const [isCheckInModalOpen, setIsCheckInModalOpen] = useState(false);
@@ -264,9 +301,9 @@ export const WeeklyPhysicalDashboard: React.FC = () => {
   const [coutStatus, setCoutStatus] = useState<WeeklyCheckOutEntry['status']>('OK');
   const [coutNotes, setCoutNotes] = useState<string>('');
 
-  // Batch entry state for the entire squad
-  const [batchDate, setBatchDate] = useState<string>('2026-10-14');
-  const [batchDay, setBatchDay] = useState<DayOfWeek>('Miércoles');
+  // Batch entry state for the entire squad (Defaults to today)
+  const [batchDate, setBatchDate] = useState<string>(() => getTodayDateStr());
+  const [batchDay, setBatchDay] = useState<DayOfWeek>(() => getTodayDayName());
   const [batchSessionType, setBatchSessionType] = useState<WeeklyCheckOutEntry['sessionType']>('Entrenamiento');
   const [batchDuration, setBatchDuration] = useState<number>(80);
 
@@ -783,7 +820,7 @@ export const WeeklyPhysicalDashboard: React.FC = () => {
               >
                 {availableWeeks.map((w) => (
                   <option key={w.mondayStr} value={w.mondayStr}>
-                    {w.label} {w.mondayStr === '2026-10-12' ? '⭐ (Semana Actual)' : ''}
+                    {w.label}
                   </option>
                 ))}
               </select>
@@ -799,13 +836,14 @@ export const WeeklyPhysicalDashboard: React.FC = () => {
               </button>
 
               {/* Go to current week */}
-              {currentWeekMonday !== '2026-10-12' && (
+              {currentWeekMonday !== realCurrentMonday && (
                 <button
                   type="button"
                   onClick={handleCurrentWeek}
-                  className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 cursor-pointer"
+                  className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 font-black shadow-sm cursor-pointer transition-colors"
+                  title="Volver a la semana en curso"
                 >
-                  Volver a Semana Actual
+                  ⭐ Ir a Semana Actual
                 </button>
               )}
 

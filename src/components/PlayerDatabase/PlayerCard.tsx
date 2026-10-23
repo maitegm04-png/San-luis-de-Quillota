@@ -1,7 +1,8 @@
 import React from 'react';
 import { Player } from '../../types/football';
 import { POSITION_LABELS } from '../../data/mockData';
-import { Activity, Star, AlertCircle, CheckCircle2, Clock } from 'lucide-react';
+import { getPlayerProjection, PROJECTION_LEVEL_MAP } from '../../data/projectionData';
+import { Activity, Star, AlertCircle, CheckCircle2, Clock, TrendingUp } from 'lucide-react';
 
 interface PlayerCardProps {
   player: Player;
@@ -11,6 +12,8 @@ interface PlayerCardProps {
 
 export const PlayerCard: React.FC<PlayerCardProps> = ({ player, onClick, onEdit }) => {
   const posConfig = POSITION_LABELS[player.primaryPosition] || POSITION_LABELS['MC'];
+  const projection = getPlayerProjection(player);
+  const projLevelDef = PROJECTION_LEVEL_MAP[projection.currentLevelId] || PROJECTION_LEVEL_MAP['nivel_4'];
 
   const getStatusBadge = () => {
     switch (player.status) {
@@ -135,6 +138,20 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({ player, onClick, onEdit 
             <span className="text-slate-500 text-[10px] block">Estatura / Peso</span>
             <span className="font-semibold">{player.heightCm} cm / {player.weightKg} kg</span>
           </div>
+        </div>
+
+        {/* Nivel de Proyección al Primer Equipo Badge */}
+        <div
+          className={`text-[10px] font-bold px-2 py-1 rounded-lg mb-2 flex items-center justify-between border ${projLevelDef.badgeBg} ${projLevelDef.borderColor} ${projLevelDef.badgeText}`}
+          title={`${projLevelDef.fullLabel} • Plazo: ${projLevelDef.timeframe}`}
+        >
+          <span className="flex items-center gap-1.5 truncate">
+            <TrendingUp className="w-3 h-3 text-amber-400 shrink-0" />
+            <span className="truncate">{projLevelDef.code} — {projLevelDef.title}</span>
+          </span>
+          <span className="text-[9px] font-black text-amber-300 bg-slate-950/70 px-1.5 py-0.2 rounded border border-white/10 shrink-0 ml-1">
+            {projLevelDef.timeframe}
+          </span>
         </div>
 
         {/* Nutritional Status Badge */}

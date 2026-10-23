@@ -97,6 +97,37 @@ export interface Player {
   injuries?: PlayerInjury[];
   currentNutrition?: PlayerCurrentNutrition;
   nutritionalHistory?: PlayerNutritionalEvaluation[];
+  firstTeamProjection?: PlayerFirstTeamProjection;
+}
+
+export type ProjectionLevelId = 'nivel_1' | 'nivel_2' | 'nivel_3' | 'nivel_4' | 'nivel_5';
+
+export interface PlayerProjectionHistoryEntry {
+  id: string;
+  previousLevelId?: ProjectionLevelId;
+  previousLevelLabel?: string;
+  newLevelId: ProjectionLevelId;
+  newLevelLabel: string;
+  date: string; // YYYY-MM-DD
+  evaluatorName: string; // ej. Fernando Guajardo (Jefe Técnico)
+  evaluatorRole?: string;
+  technicalObservations?: string;
+  individualImprovementObjectives?: string;
+  nextReviewDate?: string; // YYYY-MM-DD
+  createdAt: string;
+}
+
+export interface PlayerFirstTeamProjection {
+  currentLevelId: ProjectionLevelId;
+  currentLevelLabel: string;
+  timeframe: string;
+  evaluationDate: string; // YYYY-MM-DD
+  evaluatorName: string;
+  evaluatorRole?: string;
+  nextReviewDate?: string; // YYYY-MM-DD
+  technicalObservations?: string; // Justificación de la clasificación
+  individualImprovementObjectives?: string; // Aspectos técnicos, tácticos, físicos, nutricionales o psicológicos
+  history?: PlayerProjectionHistoryEntry[];
 }
 
 export type NutritionTrafficLight = 'green' | 'yellow' | 'red';
